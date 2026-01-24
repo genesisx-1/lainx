@@ -1,3 +1,5 @@
+import { spawn } from 'child_process';
+
 interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -7,23 +9,56 @@ export class AIService {
   private ollamaBaseUrl = 'http://localhost:11434';
 
   async chat(messages: Message[], model = 'llama3.2', stream = false) {
-    const response = await fetch(`${this.ollamaBaseUrl}/api/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
+    // Use curl via child process - more reliable than Node fetch in Electron
+    return new Promise((resolve, reject) => {
+      const payload = JSON.stringify({
         model,
         messages,
-        stream
-      })
+        stream: false
+      });
+
+      console.log(`[AIService] Sending chat request to Ollama with model: ${model}`);
+      
+      const curlProcess = spawn('curl', [
+        '-s',
+        '-X', 'POST',
+        `${this.ollamaBaseUrl}/api/chat`,
+        '-H', 'Content-Type: application/json',
+        '-d', payload
+      ]);
+
+      let stdout = '';
+      let stderr = '';
+
+      curlProcess.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      curlProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      curlProcess.on('close', (code) => {
+        if (code === 0 && stdout) {
+          try {
+            const result = JSON.parse(stdout);
+            console.log(`[AIService] Got response:`, result.message?.content?.slice(0, 100));
+            resolve(result);
+          } catch (e) {
+            console.error('[AIService] Failed to parse response:', stdout.slice(0, 200));
+            reject(new Error('Failed to parse Ollama response'));
+          }
+        } else {
+          console.error('[AIService] Curl failed:', stderr || `exit code ${code}`);
+          reject(new Error(`Ollama chat failed: ${stderr || 'unknown error'}`));
+        }
+      });
+
+      curlProcess.on('error', (err) => {
+        console.error('[AIService] Curl process error:', err);
+        reject(err);
+      });
     });
-
-    if (stream) {
-      return response.body; // Return readable stream
-    }
-
-    return await response.json();
   }
 
   async getPageContext(url: string, html: string) {

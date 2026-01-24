@@ -32,6 +32,26 @@ export function App() {
     return unsubscribe;
   }, [setShowOnboarding]);
 
+  // First launch behavior: if Ollama isn't installed, show onboarding.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const installed = await window.electron.ipcRenderer.invoke(
+          IPC_CHANNELS.OLLAMA_CHECK_INSTALLATION
+        );
+        if (!cancelled && !installed) {
+          setShowOnboarding(true);
+        }
+      } catch {
+        // If we can't check, don't block the app; user can open setup manually.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [setShowOnboarding]);
+
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     const isMac = navigator.platform.toLowerCase().includes('mac');
     const mod = isMac ? e.metaKey : e.ctrlKey;
@@ -65,9 +85,9 @@ export function App() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-bg-primary text-text-primary">
+    <div className="h-screen flex flex-col text-text-primary lain-cosmic">
       {/* Top bar with tabs and address bar */}
-      <div className="border-b border-border">
+      <div className="px-3 pt-3">
         <TabBar />
         <AddressBar />
       </div>
@@ -90,7 +110,7 @@ export function App() {
                 className="px-3 h-7 rounded-md text-xs font-medium border border-border bg-bg-panel hover:bg-bg-primary text-text-primary"
                 title="Toggle terminal (Cmd+`)"
               >
-                Terminal {terminalOpen ? '▾' : '▴'}
+                {terminalOpen ? 'Hide Terminal' : 'Show Terminal'} {terminalOpen ? '▾' : '▴'}
               </button>
               <div className="text-xs text-text-muted">
                 {terminalOpen ? 'Terminal open' : 'Terminal hidden'}

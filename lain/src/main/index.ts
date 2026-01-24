@@ -1,7 +1,8 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import * as path from 'path';
 import { TerminalService } from './services/terminal.service';
-import { EmbeddedAIService } from './services/embedded-ai.service';
+import { AIService } from './services/ai.service';
+import { OllamaManagerService } from './services/ollama-manager.service';
 import { StorageService } from './services/storage.service';
 import { registerIPCHandlers } from './ipc-handlers';
 import { IPC_CHANNELS } from '../shared/ipc-channels';
@@ -10,7 +11,8 @@ let mainWindow: BrowserWindow | null = null;
 
 // Initialize services
 const terminalService = new TerminalService();
-const aiService = new EmbeddedAIService();
+const aiService = new AIService();
+const ollamaManagerService = new OllamaManagerService();
 const storageService = new StorageService();
 
 function createWindow() {
@@ -50,27 +52,6 @@ function createWindow() {
   });
 }
 
-async function initializeAI() {
-  try {
-    const isDownloaded = await aiService.isModelDownloaded();
-    
-    if (!isDownloaded) {
-      // Model not downloaded yet
-      console.log('AI model not downloaded. User can download from onboarding.');
-    } else {
-      // Initialize AI in background (non-blocking)
-      aiService.initialize((status, progress) => {
-        console.log(`AI init: ${status} ${progress}%`);
-        mainWindow?.webContents.send('ai:init-progress', { status, progress });
-      }).catch(error => {
-        console.error('Failed to initialize AI:', error);
-      });
-    }
-  } catch (error) {
-    console.error('Error checking AI model:', error);
-  }
-}
-
 // Handle onboarding events
 ipcMain.on(IPC_CHANNELS.ONBOARDING_COMPLETE, () => {
   if (mainWindow) {
@@ -86,7 +67,7 @@ ipcMain.on(IPC_CHANNELS.ONBOARDING_SKIP, () => {
 });
 
 // Register all IPC handlers
-registerIPCHandlers(terminalService, aiService, storageService);
+registerIPCHandlers(terminalService, aiService, ollamaManagerService, storageService);
 
 // App lifecycle
 app.whenReady().then(() => {

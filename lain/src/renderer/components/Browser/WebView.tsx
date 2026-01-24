@@ -142,6 +142,136 @@ export function WebView() {
         } finally {
           updateNavStateFor(activeTabId, webview);
         }
+      },
+      // Extract page content for AI analysis
+      getPageContent: async (): Promise<{ url: string; title: string; text: string; html: string }> => {
+        try {
+          const url = webview.getURL?.() || '';
+          const title = webview.getTitle?.() || '';
+          
+          // Execute script in webview to extract page content
+          const result = await webview.executeJavaScript(`
+            (function() {
+              // Get visible text content
+              const body = document.body;
+              const text = body ? body.innerText : '';
+              
+              // Get HTML (limited to avoid huge payloads)
+              const html = document.documentElement.outerHTML.slice(0, 50000);
+              
+              return { text, html };
+            })();
+          `);
+          
+          return {
+            url,
+            title,
+            text: result?.text || '',
+            html: result?.html || ''
+          };
+        } catch (e) {
+          console.error('Failed to get page content:', e);
+          return { url: '', title: '', text: '', html: '' };
+        }
+      },
+
+      // Get interactive elements for browser agent
+      getInteractiveElements: async (): Promise<Array<{ index: number; tag: string; text: string; type?: string; placeholder?: string }>> => {
+        try {
+          return await webview.executeJavaScript(`
+            (function() {
+              const elements = [];
+              const selectors = 'a, button, input, textarea, select, [role="button"], [onclick]';
+              const nodes = document.querySelectorAll(selectors);
+              
+              nodes.forEach((el, idx) => {
+                if (idx > 50) return; // Limit to first 50 elements
+                
+                const rect = el.getBoundingClientRect();
+                // Only include visible elements
+                if (rect.width > 0 && rect.height > 0) {
+                  elements.push({
+                    index: idx,
+                    tag: el.tagName.toLowerCase(),
+                    text: (el.innerText || el.value || el.placeholder || el.getAttribute('aria-label') || '').slice(0, 50),
+                    type: el.type || null,
+                    placeholder: el.placeholder || null
+                  });
+                }
+              });
+              
+              return elements;
+            })();
+          `);
+        } catch (e) {
+          console.error('Failed to get interactive elements:', e);
+          return [];
+        }
+      },
+
+      // Click an element by index
+      clickElement: async (index: number): Promise<boolean> => {
+        try {
+          return await webview.executeJavaScript(`
+            (function() {
+              const selectors = 'a, button, input, textarea, select, [role="button"], [onclick]';
+              const nodes = document.querySelectorAll(selectors);
+              const el = nodes[${index}];
+              if (el) {
+                el.click();
+                return true;
+              }
+              return false;
+            })();
+          `);
+        } catch (e) {
+          console.error('Failed to click element:', e);
+          return false;
+        }
+      },
+
+      // Type text into an element
+      typeInElement: async (index: number, text: string): Promise<boolean> => {
+        try {
+          const escapedText = text.replace(/'/g, "\\'").replace(/\n/g, '\\n');
+          return await webview.executeJavaScript(`
+            (function() {
+              const selectors = 'a, button, input, textarea, select, [role="button"], [onclick]';
+              const nodes = document.querySelectorAll(selectors);
+              const el = nodes[${index}];
+              if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+                el.focus();
+                el.value = '${escapedText}';
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                return true;
+              }
+              return false;
+            })();
+          `);
+        } catch (e) {
+          console.error('Failed to type in element:', e);
+          return false;
+        }
+      },
+
+      // Scroll the page
+      scrollPage: async (direction: 'up' | 'down'): Promise<void> => {
+        try {
+          const amount = direction === 'down' ? 500 : -500;
+          await webview.executeJavaScript(`window.scrollBy(0, ${amount});`);
+        } catch (e) {
+          console.error('Failed to scroll:', e);
+        }
+      },
+
+      // Execute arbitrary safe JavaScript
+      executeScript: async (script: string): Promise<any> => {
+        try {
+          return await webview.executeJavaScript(script);
+        } catch (e) {
+          console.error('Failed to execute script:', e);
+          return null;
+        }
       }
     });
 

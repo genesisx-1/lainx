@@ -41,6 +41,56 @@ body {
   height: 100vh;
 }
 
+/* -------------------------------------------------------------------------- */
+/*  LAIN "cosmic glass" UI layer (doesn't affect terminal styling)             */
+/* -------------------------------------------------------------------------- */
+
+.lain-cosmic {
+  position: relative;
+  isolation: isolate;
+  background: radial-gradient(1200px 600px at 18% 12%, rgba(139, 92, 246, 0.18), transparent 55%),
+    radial-gradient(900px 520px at 72% 18%, rgba(59, 130, 246, 0.12), transparent 58%),
+    radial-gradient(1100px 700px at 55% 78%, rgba(139, 92, 246, 0.10), transparent 60%),
+    linear-gradient(180deg, #07070b 0%, #090913 30%, #05050a 100%);
+}
+
+.lain-cosmic::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  /* soft vignette + subtle "star dust" */
+  background:
+    radial-gradient(1200px 800px at 50% 40%, rgba(255, 255, 255, 0.06), transparent 60%),
+    radial-gradient(900px 600px at 60% 65%, rgba(255, 255, 255, 0.04), transparent 62%),
+    radial-gradient(400px 300px at 25% 70%, rgba(255, 255, 255, 0.03), transparent 60%),
+    radial-gradient(1000px 700px at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+  mix-blend-mode: screen;
+  opacity: 0.8;
+}
+
+.lain-glass {
+  background: rgba(16, 16, 24, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(139, 92, 246, 0.08) inset;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.lain-glow {
+  box-shadow:
+    0 10px 26px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+    0 0 24px rgba(139, 92, 246, 0.22);
+}
+
+.lain-pill {
+  border-radius: 9999px;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 8px;
@@ -86,4 +136,47 @@ input, textarea {
 
 input:focus, textarea:focus {
   border-color: var(--accent);
+}
+
+/* Bookmark micro-interactions */
+@keyframes lain-bookmark-pop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.18);
+  }
+  70% {
+    transform: scale(0.96);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes lain-bookmark-toast {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  80% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.lain-bookmark-pop {
+  animation: lain-bookmark-pop 240ms cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+.lain-bookmark-toast {
+  animation: lain-bookmark-toast 900ms ease-out both;
 }

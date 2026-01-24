@@ -1,6 +1,21 @@
 import { create } from 'zustand';
 import type { Tab } from '../../shared/types';
 
+interface PageContent {
+  url: string;
+  title: string;
+  text: string;
+  html: string;
+}
+
+interface InteractiveElement {
+  index: number;
+  tag: string;
+  text: string;
+  type?: string;
+  placeholder?: string;
+}
+
 interface BrowserState {
   tabs: Tab[];
   activeTabId: string | null;
@@ -9,6 +24,12 @@ interface BrowserState {
     goForward: () => void;
     reload: () => void;
     stop: () => void;
+    getPageContent: () => Promise<PageContent>;
+    getInteractiveElements: () => Promise<InteractiveElement[]>;
+    clickElement: (index: number) => Promise<boolean>;
+    typeInElement: (index: number, text: string) => Promise<boolean>;
+    scrollPage: (direction: 'up' | 'down') => Promise<void>;
+    executeScript: (script: string) => Promise<any>;
   } | null;
   setWebviewApi: (api: BrowserState['webviewApi']) => void;
   addTab: (url?: string) => void;

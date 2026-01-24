@@ -32,10 +32,18 @@ export class OllamaManagerService {
       // Not running, check if we have local binary
     }
 
-    // Check for bundled Ollama binary
-    const binaryPath = this.getOllamaBinaryPath();
-    this.isInstalled = fs.existsSync(binaryPath);
-    return this.isInstalled;
+    // If not running, check if Ollama exists locally or on PATH.
+    // 1) App-managed install
+    const appBinaryPath = this.getAppManagedBinaryPath();
+    if (appBinaryPath && fs.existsSync(appBinaryPath)) {
+      this.isInstalled = true;
+      return true;
+    }
+
+    // 2) Global install (e.g. user installed Ollama.app / CLI already)
+    const existsOnPath = await this.checkOllamaOnPath();
+    this.isInstalled = existsOnPath;
+    return existsOnPath;
   }
 
   /**
@@ -63,7 +71,7 @@ export class OllamaManagerService {
     const response = await fetch(downloadUrl);
     if (!response.ok) throw new Error('Download failed');
 
-    const totalSize = parseInt(response.headers.get('content-length') || '0');
+    const totalSize = parseInt(response.headers.get('content-length') || '0', 10);
     let downloadedSize = 0;
 
     // Ensure directory exists
@@ -71,9 +79,8 @@ export class OllamaManagerService {
       fs.mkdirSync(this.ollamaPath, { recursive: true });
     }
 
-    const fileStream = fs.createWriteStream(
-      path.join(this.ollamaPath, 'ollama-installer')
-    );
+    const installerPath = path.join(this.ollamaPath, 'ollama-installer');
+    const fileStream = fs.createWriteStream(installerPath);
 
     const reader = response.body?.getReader();
     if (!reader) throw new Error('Cannot read download stream');
@@ -85,11 +92,19 @@ export class OllamaManagerService {
       downloadedSize += value.length;
       fileStream.write(value);
 
-      const progress = (downloadedSize / totalSize) * 100;
-      onProgress(progress, `Downloading... ${Math.round(progress)}%`);
+      if (totalSize > 0) {
+        const progress = (downloadedSize / totalSize) * 100;
+        onProgress(progress, `Downloading... ${Math.round(progress)}%`);
+      } else {
+        // content-length might be missing; still show activity
+        onProgress(1, 'Downloading...');
+      }
     }
 
-    fileStream.close();
+    await new Promise<void>((resolve, reject) => {
+      fileStream.end(() => resolve());
+      fileStream.on('error', reject);
+    });
     onProgress(100, 'Installing Ollama...');
 
     // Extract/install based on platform
@@ -136,7 +151,7 @@ export class OllamaManagerService {
       return; // Already running
     }
 
-    const binaryPath = this.getOllamaBinaryPath();
+    const binaryPath = (await this.resolveOllamaBinary()) || 'ollama';
 
     this.ollamaProcess = spawn(binaryPath, ['serve'], {
       detached: false,
@@ -158,52 +173,106 @@ export class OllamaManagerService {
   }
 
   /**
-   * Download a specific model
+   * Download a specific model using the CLI (more reliable than streaming API)
    */
   async downloadModel(
     modelName: string,
     onProgress: (progress: number) => void
   ): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/api/pull`, {
-      method: 'POST',
-      body: JSON.stringify({ name: modelName, stream: true })
-    });
+    return new Promise((resolve, reject) => {
+      const binaryPath = 'ollama'; // Use PATH-based ollama
+      
+      console.log(`[OllamaManager] Starting download of model: ${modelName}`);
+      onProgress(1); // Show we've started
+      
+      const pullProcess = spawn(binaryPath, ['pull', modelName], {
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
 
-    const reader = response.body?.getReader();
-    const decoder = new TextDecoder();
+      let lastProgress = 0;
 
-    while (true) {
-      const { done, value } = await reader!.read();
-      if (done) break;
-
-      const text = decoder.decode(value);
-      const lines = text.split('\n').filter(Boolean);
-
-      for (const line of lines) {
-        try {
-          const data = JSON.parse(line);
-          if (data.total && data.completed) {
-            const progress = (data.completed / data.total) * 100;
+      // Parse progress from stdout/stderr
+      const parseOutput = (data: Buffer) => {
+        const text = data.toString();
+        console.log(`[OllamaManager] Output: ${text.trim()}`);
+        
+        // Look for percentage in output like "pulling manifest" or "100%"
+        const percentMatch = text.match(/(\d+)%/);
+        if (percentMatch) {
+          const progress = parseInt(percentMatch[1], 10);
+          if (progress > lastProgress) {
+            lastProgress = progress;
             onProgress(progress);
           }
-        } catch (e) {
-          // Ignore parse errors
         }
-      }
-    }
+        
+        // Also look for "success" message
+        if (text.includes('success') || text.includes('done')) {
+          onProgress(100);
+        }
+      };
+
+      pullProcess.stdout?.on('data', parseOutput);
+      pullProcess.stderr?.on('data', parseOutput);
+
+      pullProcess.on('close', (code) => {
+        console.log(`[OllamaManager] Pull process exited with code: ${code}`);
+        if (code === 0) {
+          onProgress(100);
+          resolve();
+        } else {
+          reject(new Error(`Failed to download model: ${modelName} (exit code ${code})`));
+        }
+      });
+
+      pullProcess.on('error', (err) => {
+        console.error(`[OllamaManager] Pull process error:`, err);
+        reject(err);
+      });
+    });
   }
 
   /**
-   * List downloaded models
+   * List downloaded models - try API first, fallback to CLI
    */
   async listModels(): Promise<string[]> {
+    // Try API first
     try {
       const response = await fetch(`${this.baseUrl}/api/tags`);
-      const data: any = await response.json();
-      return data.models?.map((m: any) => m.name) || [];
+      if (response.ok) {
+        const data: any = await response.json();
+        const models = data.models?.map((m: any) => m.name) || [];
+        console.log('[OllamaManager] Models from API:', models);
+        return models;
+      }
     } catch (error) {
-      return [];
+      console.log('[OllamaManager] API failed, trying CLI...');
     }
+
+    // Fallback to CLI
+    return new Promise((resolve) => {
+      const child = spawn('ollama', ['list']);
+      let output = '';
+      
+      child.stdout?.on('data', (data) => {
+        output += data.toString();
+      });
+      
+      child.on('close', (code) => {
+        if (code === 0) {
+          // Parse "ollama list" output - skip header line, get model names
+          const lines = output.trim().split('\n').slice(1);
+          const models = lines.map(line => line.split(/\s+/)[0]).filter(Boolean);
+          console.log('[OllamaManager] Models from CLI:', models);
+          resolve(models);
+        } else {
+          console.log('[OllamaManager] CLI list failed');
+          resolve([]);
+        }
+      });
+      
+      child.on('error', () => resolve([]));
+    });
   }
 
   private getOllamaBinaryPath(): string {
@@ -215,6 +284,39 @@ export class OllamaManagerService {
     } else {
       return '/usr/local/bin/ollama'; // Linux global install
     }
+  }
+
+  // Returns the app-managed binary path (if we installed Ollama into userData).
+  private getAppManagedBinaryPath(): string | null {
+    const platform = process.platform;
+    if (platform === 'darwin') {
+      return path.join(this.ollamaPath, 'Ollama.app/Contents/MacOS/ollama');
+    }
+    if (platform === 'win32') {
+      return path.join(this.ollamaPath, 'ollama.exe');
+    }
+    // Linux install script installs globally; we don't manage a binary here.
+    return null;
+  }
+
+  private async checkOllamaOnPath(): Promise<boolean> {
+    return new Promise((resolve) => {
+      const cmd = process.platform === 'win32' ? 'where' : 'which';
+      const child = spawn(cmd, ['ollama']);
+      child.on('close', (code) => resolve(code === 0));
+      child.on('error', () => resolve(false));
+    });
+  }
+
+  private async resolveOllamaBinary(): Promise<string | null> {
+    const appBinaryPath = this.getAppManagedBinaryPath();
+    if (appBinaryPath && fs.existsSync(appBinaryPath)) return appBinaryPath;
+
+    const existsOnPath = await this.checkOllamaOnPath();
+    if (existsOnPath) return 'ollama';
+
+    // Fallback to previous logic (may still work on some systems).
+    return this.getOllamaBinaryPath();
   }
 
   private async waitForServer(maxAttempts = 30): Promise<void> {

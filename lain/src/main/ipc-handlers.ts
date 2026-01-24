@@ -1,12 +1,14 @@
 import { ipcMain, IpcMainInvokeEvent } from 'electron';
 import { TerminalService } from './services/terminal.service';
-import { EmbeddedAIService } from './services/embedded-ai.service';
+import { AIService } from './services/ai.service';
+import { OllamaManagerService } from './services/ollama-manager.service';
 import { StorageService } from './services/storage.service';
 import { IPC_CHANNELS } from '../shared/ipc-channels';
 
 export function registerIPCHandlers(
   terminalService: TerminalService,
-  aiService: EmbeddedAIService,
+  aiService: AIService,
+  ollamaManager: OllamaManagerService,
   storageService: StorageService
 ) {
   // Terminal handlers
@@ -55,92 +57,63 @@ export function registerIPCHandlers(
     return terminals;
   });
 
-  // Embedded AI handlers (gracefully handle if AI not ready)
+  // Ollama handlers
   ipcMain.handle(IPC_CHANNELS.OLLAMA_CHECK_INSTALLATION, async () => {
-    try {
-      return await aiService.isModelDownloaded();
-    } catch {
-      return false;
-    }
+    return await ollamaManager.checkInstallation();
   });
 
   ipcMain.handle(IPC_CHANNELS.OLLAMA_INSTALL, async (event) => {
-    try {
-      await aiService.initialize((status: string, progress: number) => {
-        event.sender.send('ollama:install-progress', { progress, status });
-      });
-      return { success: true };
-    } catch (error) {
-      console.error('AI initialization error:', error);
-      throw error;
-    }
+    await ollamaManager.downloadAndInstall((progress: number, status: string) => {
+      event.sender.send('ollama:install-progress', { progress, status });
+    });
+    return { success: true };
   });
 
   ipcMain.handle(IPC_CHANNELS.OLLAMA_DOWNLOAD_MODEL, async (event, modelName: string) => {
-    try {
-      await aiService.initialize((status: string, progress: number) => {
-        event.sender.send('ollama:model-progress', { modelName, progress });
-      });
-      return { success: true };
-    } catch (error) {
-      console.error('AI model download error:', error);
-      throw error;
-    }
+    console.log(`[IPC] Starting model download: ${modelName}`);
+    await ollamaManager.downloadModel(modelName, (progress: number) => {
+      console.log(`[IPC] Model ${modelName} progress: ${Math.round(progress)}%`);
+      event.sender.send('ollama:model-progress', { modelName, progress });
+    });
+    console.log(`[IPC] Model download complete: ${modelName}`);
+    return { success: true };
   });
 
   ipcMain.handle(IPC_CHANNELS.OLLAMA_LIST_MODELS, async () => {
-    try {
-      return aiService.isReady() ? ['qwen2.5:0.5b (embedded)'] : [];
-    } catch {
-      return [];
-    }
+    return await ollamaManager.listModels();
   });
 
   ipcMain.handle(IPC_CHANNELS.OLLAMA_START_SERVER, async () => {
-    // No server needed for embedded AI
+    await ollamaManager.startServer();
     return { success: true };
   });
 
   ipcMain.handle(IPC_CHANNELS.OLLAMA_STOP_SERVER, async () => {
-    // No server to stop
+    await ollamaManager.stopServer();
     return { success: true };
   });
 
-  // AI handlers (gracefully handle if AI not ready)
+  // AI handlers (Ollama)
   ipcMain.handle(IPC_CHANNELS.AI_CHAT, async (event, messages: any[], model?: string) => {
-    try {
-      if (!aiService.isReady()) {
-        throw new Error('AI is not initialized. Please set up AI from the menu.');
-      }
-      const response = await aiService.chat(messages);
-      return { message: { content: response } };
-    } catch (error: any) {
-      console.error('AI chat error:', error);
-      throw error;
-    }
+    const response: any = await aiService.chat(messages, model || 'llama3.2', false);
+    return { message: { content: response?.message?.content || '' } };
   });
 
   ipcMain.handle(IPC_CHANNELS.AI_SUMMARIZE_PAGE, async (event, html: string, url: string) => {
     try {
-      if (!aiService.isReady()) {
-        return 'AI features are not available. Enable AI from Settings to use page summarization.';
-      }
       return await aiService.summarizePage(html, url);
     } catch (error: any) {
       console.error('AI summarize error:', error);
-      return 'Unable to summarize page. AI features may not be fully initialized.';
+      return 'Unable to summarize page. Ensure Ollama is installed, running, and a model is downloaded.';
     }
   });
 
   ipcMain.handle(IPC_CHANNELS.AI_EXPLAIN_OUTPUT, async (event, output: string) => {
     try {
-      if (!aiService.isReady()) {
-        return 'AI features are not available. Enable AI from Settings to explain terminal output.';
-      }
       return await aiService.explainTerminalOutput(output);
     } catch (error: any) {
       console.error('AI explain error:', error);
-      return 'Unable to explain output. AI features may not be fully initialized.';
+      return 'Unable to explain output. Ensure Ollama is installed, running, and a model is downloaded.';
     }
   });
 

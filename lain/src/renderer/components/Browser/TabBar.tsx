@@ -14,18 +14,18 @@ export function TabBar() {
   }, [addTab]);
 
   return (
-    <div className="flex items-center h-12 px-2 bg-bg-secondary">
+    <div className="flex items-center h-11 px-2 lain-glass rounded-xl">
       {/* Tab list */}
       <div className="flex items-center gap-1 flex-1 overflow-x-auto">
         {tabs.map((tab) => (
           <div
             key={tab.id}
             className={`
-              flex items-center gap-2 px-4 py-2 rounded-t-lg cursor-pointer
-              min-w-[120px] max-w-[200px] group
+              flex items-center gap-2 px-4 h-9 rounded-xl cursor-pointer
+              min-w-[120px] max-w-[220px] group transition-colors
               ${tab.isActive 
-                ? 'bg-bg-primary text-text-primary' 
-                : 'bg-bg-panel text-text-secondary hover:bg-bg-secondary'
+                ? 'bg-bg-primary/40 text-text-primary lain-glow' 
+                : 'bg-bg-panel/30 text-text-secondary hover:bg-bg-secondary/40'
               }
             `}
             onClick={() => setActiveTab(tab.id)}
@@ -54,7 +54,7 @@ export function TabBar() {
             {/* Close button */}
             <button
               type="button"
-              className="w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-border rounded"
+              className="w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-bg-secondary/60 rounded"
               onClick={(e) => handleCloseTab(e, tab.id)}
             >
               ×
@@ -65,7 +65,7 @@ export function TabBar() {
         {/* New tab button */}
         <button
           type="button"
-          className="w-8 h-8 flex items-center justify-center hover:bg-bg-panel rounded text-text-secondary"
+          className="w-9 h-9 flex items-center justify-center hover:bg-bg-secondary/40 rounded-xl text-text-secondary border border-transparent hover:border-border/40 transition-colors"
           onClick={handleAddTab}
           title="New tab (Cmd+T)"
         >

@@ -2,17 +2,35 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useAIStore } from '../../store/ai.store';
 import { IPC_CHANNELS } from '../../../shared/ipc-channels';
 import { useUIStore } from '../../store/ui.store';
+import { useBrowserStore } from '../../store/browser.store';
+import { ChatSettings } from './ChatSettings';
+import { ChatHistory } from './ChatHistory';
 
 export function ChatPanel() {
-  const { messages, isLoading, addMessage, setLoading } = useAIStore();
+  const { 
+    messages, 
+    isLoading, 
+    addMessage, 
+    setLoading, 
+    getSystemMessage,
+    saveCurrentConversation,
+    settings
+  } = useAIStore();
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { setShowOnboarding, toggleSidebar } = useUIStore();
+  const { webviewApi, tabs, activeTabId } = useBrowserStore();
 
   const [ollamaInstalled, setOllamaInstalled] = useState<boolean | null>(null);
   const [models, setModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>(''); // set after fetch
   const [statusText, setStatusText] = useState<string>('Checking…');
+  const [showSettings, setShowSettings] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  
+  // Check if we're on a real page (not welcome page)
+  const activeTab = tabs.find((t) => t.id === activeTabId);
+  const canAnalyzePage = activeTab && activeTab.url !== 'lain://welcome' && webviewApi?.getPageContent;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -28,15 +46,21 @@ export function ChatPanel() {
     async function refreshAIStatus() {
       try {
         setStatusText('Checking…');
+        console.log('[ChatPanel] Checking Ollama installation...');
+        
         const installed = await window.electron.ipcRenderer.invoke(
           IPC_CHANNELS.OLLAMA_CHECK_INSTALLATION
         );
+        console.log('[ChatPanel] Ollama installed:', installed);
+        
         if (cancelled) return;
         setOllamaInstalled(!!installed);
 
         const list: string[] = await window.electron.ipcRenderer.invoke(
           IPC_CHANNELS.OLLAMA_LIST_MODELS
         );
+        console.log('[ChatPanel] Models list:', list);
+        
         if (cancelled) return;
         setModels(Array.isArray(list) ? list : []);
 
@@ -54,7 +78,9 @@ export function ChatPanel() {
 
         setStatusText('Ready');
         setSelectedModel((prev) => prev || list[0]);
+        console.log('[ChatPanel] AI is ready, model:', list[0]);
       } catch (e) {
+        console.error('[ChatPanel] Error during AI status check:', e);
         if (!cancelled) {
           setOllamaInstalled(false);
           setModels([]);
@@ -93,8 +119,183 @@ export function ChatPanel() {
     }
   };
 
+  const refreshStatus = async () => {
+    try {
+      setStatusText('Refreshing…');
+      const installed = await window.electron.ipcRenderer.invoke(
+        IPC_CHANNELS.OLLAMA_CHECK_INSTALLATION
+      );
+      setOllamaInstalled(!!installed);
+
+      if (installed) {
+        await startOllamaServer();
+      } else {
+        setStatusText('Not installed');
+      }
+    } catch (e) {
+      console.error('[ChatPanel] Refresh error:', e);
+      setStatusText('Error');
+    }
+  };
+
+  const summarizePage = async () => {
+    if (!canAnalyzePage || isLoading || !selectedModel) return;
+    
+    setLoading(true);
+    addMessage({
+      role: 'user',
+      content: `📄 Summarize this page: ${activeTab?.title || activeTab?.url}`
+    });
+
+    try {
+      const pageContent = await webviewApi!.getPageContent();
+      console.log('[ChatPanel] Got page content:', pageContent.url, 'text length:', pageContent.text.length);
+
+      if (!pageContent.text) {
+        addMessage({
+          role: 'assistant',
+          content: 'I couldn\'t read the page content. The page might still be loading or be protected.'
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Send to AI for summarization
+      const response = await window.electron.ipcRenderer.invoke(
+        IPC_CHANNELS.AI_CHAT,
+        [
+          {
+            role: 'system',
+            content: 'You are a helpful assistant that summarizes web pages concisely. Give a clear, structured summary with key points.'
+          },
+          {
+            role: 'user',
+            content: `Summarize this webpage (${pageContent.url}):\n\nTitle: ${pageContent.title}\n\nContent:\n${pageContent.text.slice(0, 6000)}`
+          }
+        ],
+        selectedModel
+      );
+
+      if (response?.message?.content) {
+        addMessage({
+          role: 'assistant',
+          content: response.message.content
+        });
+      } else {
+        addMessage({
+          role: 'assistant',
+          content: 'I couldn\'t generate a summary. Please try again.'
+        });
+      }
+    } catch (error) {
+      console.error('[ChatPanel] Summarize error:', error);
+      addMessage({
+        role: 'assistant',
+        content: 'Failed to summarize the page. Make sure the AI is running.'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const askAboutPage = async () => {
+    if (!canAnalyzePage || !selectedModel) return;
+    
+    // Pre-fill the input with context about asking about the page
+    setInput(`About this page (${activeTab?.title}): `);
+  };
+
+  // Browser Agent Mode - Show interactive elements and let AI control the page
+  const [agentMode, setAgentMode] = useState(false);
+
+  const scanPage = async () => {
+    if (!webviewApi?.getInteractiveElements) return;
+    
+    addMessage({
+      role: 'user',
+      content: '🔍 Scanning page for interactive elements...'
+    });
+
+    try {
+      const elements = await webviewApi.getInteractiveElements();
+      
+      // Build a description for the AI
+      const elementList = elements.map((el, i) => 
+        `[${i}] ${el.tag}${el.type ? ` (${el.type})` : ''}: "${el.text || el.placeholder || 'no text'}"`
+      ).join('\n');
+
+      addMessage({
+        role: 'assistant',
+        content: `Found ${elements.length} interactive elements:\n\n${elementList}\n\nTell me which element to click or what to type, e.g.:\n- "Click element 3"\n- "Type 'hello' in element 5"\n- "Scroll down"`
+      });
+    } catch (error) {
+      addMessage({
+        role: 'assistant',
+        content: 'Failed to scan the page for elements.'
+      });
+    }
+  };
+
+  const executeAgentCommand = async (command: string) => {
+    if (!webviewApi) return;
+
+    const lowerCmd = command.toLowerCase();
+
+    // Click command
+    const clickMatch = lowerCmd.match(/click\s+(?:element\s+)?(\d+)/i);
+    if (clickMatch) {
+      const idx = parseInt(clickMatch[1], 10);
+      const success = await webviewApi.clickElement(idx);
+      addMessage({
+        role: 'assistant',
+        content: success ? `✅ Clicked element ${idx}` : `❌ Failed to click element ${idx}`
+      });
+      // Re-scan after action
+      setTimeout(scanPage, 1000);
+      return true;
+    }
+
+    // Type command
+    const typeMatch = command.match(/type\s+['"](.+)['"]\s+(?:in|into)\s+(?:element\s+)?(\d+)/i);
+    if (typeMatch) {
+      const text = typeMatch[1];
+      const idx = parseInt(typeMatch[2], 10);
+      const success = await webviewApi.typeInElement(idx, text);
+      addMessage({
+        role: 'assistant',
+        content: success ? `✅ Typed "${text}" in element ${idx}` : `❌ Failed to type in element ${idx}`
+      });
+      return true;
+    }
+
+    // Scroll command
+    if (lowerCmd.includes('scroll down')) {
+      await webviewApi.scrollPage('down');
+      addMessage({ role: 'assistant', content: '✅ Scrolled down' });
+      return true;
+    }
+    if (lowerCmd.includes('scroll up')) {
+      await webviewApi.scrollPage('up');
+      addMessage({ role: 'assistant', content: '✅ Scrolled up' });
+      return true;
+    }
+
+    return false;
+  };
+
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
+
+    // Check for agent commands first (if agent mode is on)
+    if (agentMode && canAnalyzePage) {
+      const userInput = input.trim();
+      addMessage({ role: 'user', content: userInput });
+      setInput('');
+      
+      const handled = await executeAgentCommand(userInput);
+      if (handled) return;
+    }
+
     if (!ollamaInstalled) {
       addMessage({
         role: 'assistant',
@@ -122,9 +323,17 @@ export function ChatPanel() {
     setLoading(true);
 
     try {
+      // Build messages array with system prompt from settings
+      const systemPrompt = getSystemMessage();
+      const messagesWithSystem = [
+        ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
+        ...messages,
+        userMessage
+      ];
+
       const response = await window.electron.ipcRenderer.invoke(
         IPC_CHANNELS.AI_CHAT,
-        [...messages, userMessage],
+        messagesWithSystem,
         selectedModel
       );
 
@@ -132,6 +341,14 @@ export function ChatPanel() {
         addMessage({
           role: 'assistant',
           content: response.message.content
+        });
+        // Auto-save conversation after each exchange
+        saveCurrentConversation();
+      } else {
+        console.error('[ChatPanel] Invalid response format:', response);
+        addMessage({
+          role: 'assistant',
+          content: 'I received an empty response. The model may still be loading.'
         });
       }
     } catch (error) {
@@ -153,23 +370,58 @@ export function ChatPanel() {
     }
   };
 
+  // Show settings or history panels
+  if (showSettings) {
+    return <ChatSettings onClose={() => setShowSettings(false)} />;
+  }
+  if (showHistory) {
+    return <ChatHistory onClose={() => setShowHistory(false)} />;
+  }
+
   return (
     <div className="h-full flex flex-col bg-bg-secondary">
       {/* Header */}
       <div className="flex items-center justify-between h-12 px-4 border-b border-border">
-        <h2 className="text-sm font-semibold text-text-primary">AI Assistant</h2>
         <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-text-primary">
+            {settings.userName ? `Hi, ${settings.userName}` : 'AI Assistant'}
+          </h2>
+        </div>
+        <div className="flex items-center gap-1">
           <div
-            className={`w-2 h-2 rounded-full ${
+            className={`w-2 h-2 rounded-full mr-1 ${
               statusText === 'Ready' ? 'bg-green-500' : 'bg-yellow-500'
             }`}
             title={statusText}
           />
-          <span className="text-xs text-text-muted">{selectedModel || statusText}</span>
+          <button
+            type="button"
+            onClick={() => setShowHistory(true)}
+            className="w-7 h-7 rounded hover:bg-bg-panel flex items-center justify-center text-text-secondary text-xs"
+            title="Chat history"
+          >
+            📋
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowSettings(true)}
+            className="w-7 h-7 rounded hover:bg-bg-panel flex items-center justify-center text-text-secondary text-xs"
+            title="Settings"
+          >
+            ⚙️
+          </button>
+          <button
+            type="button"
+            onClick={refreshStatus}
+            className="w-7 h-7 rounded hover:bg-bg-panel flex items-center justify-center text-text-secondary text-xs"
+            title="Refresh AI status"
+          >
+            ↻
+          </button>
           <button
             type="button"
             onClick={toggleSidebar}
-            className="ml-2 w-7 h-7 rounded hover:bg-bg-panel flex items-center justify-center text-text-secondary"
+            className="w-7 h-7 rounded hover:bg-bg-panel flex items-center justify-center text-text-secondary"
             title="Close AI panel"
           >
             ×
@@ -279,6 +531,67 @@ export function ChatPanel() {
 
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Page analysis buttons */}
+      {statusText === 'Ready' && canAnalyzePage && (
+        <div className="px-4 py-2 border-t border-border bg-bg-panel space-y-2">
+          <div className="flex gap-2">
+            <button
+              onClick={summarizePage}
+              disabled={isLoading}
+              className="flex-1 px-3 py-2 text-xs bg-accent/20 hover:bg-accent/30 border border-accent/40 rounded-lg text-accent font-medium disabled:opacity-50 transition-colors"
+            >
+              📄 Summarize
+            </button>
+            <button
+              onClick={askAboutPage}
+              disabled={isLoading}
+              className="flex-1 px-3 py-2 text-xs bg-bg-secondary hover:bg-bg-primary border border-border rounded-lg text-text-primary font-medium disabled:opacity-50 transition-colors"
+            >
+              💬 Ask
+            </button>
+            <button
+              onClick={() => {
+                setAgentMode(!agentMode);
+                if (!agentMode) scanPage();
+              }}
+              disabled={isLoading}
+              className={`flex-1 px-3 py-2 text-xs border rounded-lg font-medium disabled:opacity-50 transition-colors ${
+                agentMode
+                  ? 'bg-green-500/20 border-green-500/40 text-green-400'
+                  : 'bg-bg-secondary hover:bg-bg-primary border-border text-text-primary'
+              }`}
+            >
+              🤖 {agentMode ? 'Agent ON' : 'Agent'}
+            </button>
+          </div>
+          {agentMode && (
+            <div className="flex gap-2">
+              <button
+                onClick={scanPage}
+                disabled={isLoading}
+                className="flex-1 px-2 py-1.5 text-xs bg-bg-secondary hover:bg-bg-primary border border-border rounded text-text-muted"
+              >
+                🔍 Rescan
+              </button>
+              <button
+                onClick={() => webviewApi?.scrollPage('up')}
+                disabled={isLoading}
+                className="px-2 py-1.5 text-xs bg-bg-secondary hover:bg-bg-primary border border-border rounded text-text-muted"
+              >
+                ↑
+              </button>
+              <button
+                onClick={() => webviewApi?.scrollPage('down')}
+                disabled={isLoading}
+                className="px-2 py-1.5 text-xs bg-bg-secondary hover:bg-bg-primary border border-border rounded text-text-muted"
+              >
+                ↓
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Input */}
       <div className="p-4 border-t border-border">
