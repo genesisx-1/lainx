@@ -3,7 +3,12 @@ import { useBrowserStore } from '../../store/browser.store';
 import { useUIStore } from '../../store/ui.store';
 import { useBookmarksStore } from '../../store/bookmarks.store';
 
-export function AddressBar() {
+interface AddressBarProps {
+  onHistoryClick?: () => void;
+  onSettingsClick?: () => void;
+}
+
+export function AddressBar({ onHistoryClick, onSettingsClick }: AddressBarProps) {
   const { tabs, activeTabId, updateTab, webviewApi, addTab } = useBrowserStore();
   const { toggleSidebar, toggleTerminal, sidebarOpen, terminalOpen } = useUIStore();
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
@@ -177,8 +182,8 @@ export function AddressBar() {
             placeholder="Search or enter URL"
           />
 
-          {/* Bookmark buttons (Comet-like: inside address bar, right side) */}
-          <div className="absolute inset-y-0 right-2 flex items-center gap-1">
+          {/* Bookmark buttons (inside address bar, right side) */}
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
             <div className="relative">
               <button
                 type="button"
@@ -219,12 +224,20 @@ export function AddressBar() {
               className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-bg-secondary/40 text-text-muted transition-colors"
               title="Bookmarks"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className={bookmarksOpen ? 'rotate-180 transition-transform' : 'transition-transform'}
+              >
                 <path
-                  d="M8 6h11M8 12h11M8 18h11M5 6h.01M5 12h.01M5 18h.01"
+                  d="M6 9l6 6 6-6"
                   stroke="currentColor"
                   strokeWidth="1.8"
                   strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
               </svg>
             </button>
@@ -284,29 +297,58 @@ export function AddressBar() {
 
       {/* Actions */}
       <div className="flex gap-1">
+        {/* History button */}
+        <button
+          type="button"
+          onClick={onHistoryClick}
+          className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-bg-secondary/40 text-text-muted transition-colors"
+          title="History (Cmd+Y)"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </button>
+
+        {/* Settings button */}
+        <button
+          type="button"
+          onClick={onSettingsClick}
+          className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-bg-secondary/40 text-text-muted transition-colors"
+          title="Settings"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
+
         <button
           type="button"
           onClick={toggleTerminal}
-          className={`px-3 h-9 flex items-center justify-center rounded text-sm border transition-colors ${
+          className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${
             terminalOpen
-              ? 'bg-bg-secondary/40 text-text-primary border-border/40'
-              : 'hover:bg-bg-secondary/40 text-text-secondary border-transparent hover:border-border/40'
+              ? 'bg-bg-secondary/40 text-text-primary'
+              : 'hover:bg-bg-secondary/40 text-text-muted'
           }`}
           title={terminalOpen ? 'Hide terminal (Cmd+`)' : 'Show terminal (Cmd+`)'}
         >
-          {terminalOpen ? 'Hide Terminal' : 'Show Terminal'}
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
         </button>
         <button
           type="button"
           onClick={toggleSidebar}
-          className={`px-3 h-9 flex items-center justify-center rounded text-sm border transition-colors ${
+          className={`w-9 h-9 flex items-center justify-center rounded-xl transition-colors ${
             sidebarOpen
-              ? 'bg-accent text-white border-accent'
-              : 'hover:bg-bg-secondary/40 text-text-secondary border-transparent hover:border-border/40'
+              ? 'bg-accent text-white'
+              : 'hover:bg-bg-secondary/40 text-text-muted'
           }`}
           title="Toggle AI panel (Cmd+Shift+A)"
         >
-          AI
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
         </button>
       </div>
 

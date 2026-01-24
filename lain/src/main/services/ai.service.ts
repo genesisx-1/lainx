@@ -8,7 +8,7 @@ interface Message {
 export class AIService {
   private ollamaBaseUrl = 'http://localhost:11434';
 
-  async chat(messages: Message[], model = 'llama3.2', stream = false) {
+  async chat(messages: Message[], model = 'qwen2.5:0.5b', stream = false) {
     // Use curl via child process - more reliable than Node fetch in Electron
     return new Promise((resolve, reject) => {
       const payload = JSON.stringify({

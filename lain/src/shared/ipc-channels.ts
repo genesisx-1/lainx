@@ -35,6 +35,14 @@ export const IPC_CHANNELS = {
   STORAGE_ADD_BOOKMARK: 'storage:add-bookmark',
   STORAGE_GET_BOOKMARKS: 'storage:get-bookmarks',
 
+  // Downloads
+  DOWNLOAD_START: 'download:start',
+  DOWNLOAD_PROGRESS: 'download:progress',
+  DOWNLOAD_COMPLETE: 'download:complete',
+  DOWNLOAD_CANCEL: 'download:cancel',
+  DOWNLOAD_PAUSE: 'download:pause',
+  DOWNLOAD_RESUME: 'download:resume',
+
   // Window/App
   SHOW_ONBOARDING: 'show-onboarding',
   ONBOARDING_COMPLETE: 'onboarding:complete',

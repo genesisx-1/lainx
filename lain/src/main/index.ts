@@ -1,5 +1,7 @@
-import { app, BrowserWindow, ipcMain, nativeImage } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeImage, session, shell } from 'electron';
+import type { Session } from 'electron';
 import * as path from 'path';
+import * as os from 'os';
 import { TerminalService } from './services/terminal.service';
 import { AIService } from './services/ai.service';
 import { OllamaManagerService } from './services/ollama-manager.service';
@@ -8,6 +10,8 @@ import { registerIPCHandlers } from './ipc-handlers';
 import { IPC_CHANNELS } from '../shared/ipc-channels';
 
 let mainWindow: BrowserWindow | null = null;
+const activeDownloads = new Map<string, Electron.DownloadItem>();
+const downloadSessions = new WeakSet<Session>();
 
 // Initialize services
 const terminalService = new TerminalService();
@@ -63,6 +67,93 @@ function createWindow() {
   });
 }
 
+// Download handling
+function setupDownloadHandling() {
+  setupDownloadHandlingForSession(session.defaultSession);
+}
+
+function setupDownloadHandlingForSession(s: Session) {
+  if (downloadSessions.has(s)) return;
+  downloadSessions.add(s);
+
+  s.on('will-download', (_event, item, _webContents) => {
+    const downloadId = `download-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const filename = item.getFilename();
+    const downloadPath = path.join(os.homedir(), 'Downloads', filename);
+    
+    item.setSavePath(downloadPath);
+    activeDownloads.set(downloadId, item);
+    
+    if (mainWindow) {
+      mainWindow.webContents.send(IPC_CHANNELS.DOWNLOAD_START, {
+        id: downloadId,
+        url: item.getURL(),
+        filename: filename,
+        savePath: downloadPath,
+        totalBytes: item.getTotalBytes(),
+      });
+    }
+    
+    item.on('updated', (_event, state) => {
+      if (mainWindow) {
+        mainWindow.webContents.send(IPC_CHANNELS.DOWNLOAD_PROGRESS, {
+          id: downloadId,
+          receivedBytes: item.getReceivedBytes(),
+          totalBytes: item.getTotalBytes(),
+          state: state,
+        });
+      }
+    });
+    
+    item.once('done', (_event, state) => {
+      activeDownloads.delete(downloadId);
+      if (mainWindow) {
+        mainWindow.webContents.send(IPC_CHANNELS.DOWNLOAD_COMPLETE, {
+          id: downloadId,
+          state: state,
+          savePath: item.getSavePath(),
+        });
+      }
+    });
+  });
+}
+
+// Download IPC handlers
+ipcMain.handle(IPC_CHANNELS.DOWNLOAD_CANCEL, (_event, downloadId: string) => {
+  const item = activeDownloads.get(downloadId);
+  if (item) {
+    item.cancel();
+    activeDownloads.delete(downloadId);
+  }
+  return { success: true };
+});
+
+ipcMain.handle(IPC_CHANNELS.DOWNLOAD_PAUSE, (_event, downloadId: string) => {
+  const item = activeDownloads.get(downloadId);
+  if (item && item.canResume()) {
+    item.pause();
+  }
+  return { success: true };
+});
+
+ipcMain.handle(IPC_CHANNELS.DOWNLOAD_RESUME, (_event, downloadId: string) => {
+  const item = activeDownloads.get(downloadId);
+  if (item && item.isPaused()) {
+    item.resume();
+  }
+  return { success: true };
+});
+
+// Shell handlers
+ipcMain.handle('shell:open-path', async (_event, filePath: string) => {
+  try {
+    await shell.openPath(filePath);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: String(e) };
+  }
+});
+
 // Handle onboarding events
 ipcMain.on(IPC_CHANNELS.ONBOARDING_COMPLETE, () => {
   if (mainWindow) {
@@ -93,7 +184,18 @@ app.whenReady().then(() => {
       // ignore
     }
   }
+
+  setupDownloadHandling();
   createWindow();
+
+  // Handle downloads for webview sessions
+  app.on('web-contents-created', (_event, contents) => {
+    try {
+      setupDownloadHandlingForSession(contents.session);
+    } catch {
+      // ignore
+    }
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

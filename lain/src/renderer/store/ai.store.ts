@@ -8,6 +8,7 @@ interface ChatSettings {
   systemPrompt: string;
   responseStyle: 'concise' | 'balanced' | 'detailed';
   personality: string;
+  preferredModel: string;
 }
 
 // Saved conversation
@@ -53,7 +54,8 @@ const defaultSettings: ChatSettings = {
   userName: '',
   systemPrompt: '',
   responseStyle: 'balanced',
-  personality: 'helpful'
+  personality: 'helpful',
+  preferredModel: ''
 };
 
 // Generate a title from first user message

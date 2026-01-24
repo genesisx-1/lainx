@@ -82,10 +82,10 @@ export function ChatSettings({ onClose }: ChatSettingsProps) {
           </label>
           <div className="grid grid-cols-2 gap-2">
             {[
-              { id: 'helpful', label: '🤖 Helpful', desc: 'Straightforward assistance' },
-              { id: 'friendly', label: '😊 Friendly', desc: 'Warm and casual' },
-              { id: 'professional', label: '👔 Professional', desc: 'Formal and precise' },
-              { id: 'creative', label: '🎨 Creative', desc: 'Imaginative responses' }
+              { id: 'helpful', label: 'Helpful', desc: 'Straightforward assistance' },
+              { id: 'friendly', label: 'Friendly', desc: 'Warm and casual' },
+              { id: 'professional', label: 'Professional', desc: 'Formal and precise' },
+              { id: 'creative', label: 'Creative', desc: 'Imaginative responses' }
             ].map((p) => (
               <button
                 key={p.id}

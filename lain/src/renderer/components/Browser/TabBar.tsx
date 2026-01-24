@@ -13,6 +13,10 @@ export function TabBar() {
     addTab();
   }, [addTab]);
 
+  const handleAddPrivateTab = useCallback(() => {
+    addTab('lain://welcome', { isPrivate: true });
+  }, [addTab]);
+
   return (
     <div className="flex items-center h-11 px-2 lain-glass rounded-xl">
       {/* Tab list */}
@@ -51,6 +55,16 @@ export function TabBar() {
               {tab.title}
             </span>
 
+            {/* Private indicator */}
+            {tab.isPrivate && (
+              <span className="text-text-muted" title="Private tab">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 12s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9.5 9.5h.01M14.5 9.5h.01" />
+                </svg>
+              </span>
+            )}
+
             {/* Close button */}
             <button
               type="button"
@@ -70,6 +84,19 @@ export function TabBar() {
           title="New tab (Cmd+T)"
         >
           +
+        </button>
+
+        {/* New private tab button */}
+        <button
+          type="button"
+          className="w-9 h-9 flex items-center justify-center hover:bg-bg-secondary/40 rounded-xl text-text-secondary border border-transparent hover:border-border/40 transition-colors"
+          onClick={handleAddPrivateTab}
+          title="New private tab"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 12s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9.5 9.5h.01M14.5 9.5h.01" />
+          </svg>
         </button>
       </div>
     </div>

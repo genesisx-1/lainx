@@ -95,7 +95,13 @@ export function registerIPCHandlers(
 
   // AI handlers (Ollama)
   ipcMain.handle(IPC_CHANNELS.AI_CHAT, async (event, messages: any[], model?: string) => {
-    const response: any = await aiService.chat(messages, model || 'llama3.2', false);
+    // Use the provided model, or fall back to first available model
+    let modelToUse = model;
+    if (!modelToUse) {
+      const models = await ollamaManager.listModels();
+      modelToUse = models?.[0] || 'qwen2.5:0.5b';
+    }
+    const response: any = await aiService.chat(messages, modelToUse, false);
     return { message: { content: response?.message?.content || '' } };
   });
 

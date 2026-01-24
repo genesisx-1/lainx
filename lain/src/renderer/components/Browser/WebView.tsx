@@ -1,13 +1,37 @@
-import React, { useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useCallback, useMemo, useState, forwardRef, useImperativeHandle } from 'react';
 import { useBrowserStore } from '../../store/browser.store';
 import { WelcomePage } from './WelcomePage';
+import { FindInPage } from './FindInPage';
+import { WebViewContextMenu } from './WebViewContextMenu';
 
-export function WebView() {
-  const { tabs, activeTabId, updateTab, setWebviewApi } = useBrowserStore();
+interface WebViewProps {
+  showFindInPage?: boolean;
+  onCloseFindInPage?: () => void;
+  onNavigate?: (url: string, title: string) => void;
+}
+
+export const WebView = forwardRef<Electron.WebviewTag | null, WebViewProps>(function WebView(
+  { showFindInPage, onCloseFindInPage, onNavigate },
+  ref
+) {
+  const { tabs, activeTabId, updateTab, setWebviewApi, addTab } = useBrowserStore();
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
   const webviewsByIdRef = useRef<Record<string, any>>({});
   const cleanupByIdRef = useRef<Record<string, (() => void) | undefined>>({});
   const updateTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
+  const activeWebviewRef = useRef<Electron.WebviewTag | null>(null);
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    linkUrl?: string;
+    imageUrl?: string;
+    selectedText?: string;
+  } | null>(null);
+
+  // Expose ref to parent (typed as potentially null)
+  useImperativeHandle(ref, () => activeWebviewRef.current!, [activeTabId]);
 
   const updateNavStateFor = useCallback((tabId: string, webview: any) => {
     // Debounce navigation state updates to avoid freezing
@@ -54,12 +78,21 @@ export function WebView() {
     };
 
     const onDidStopLoading = () => {
+      const url = webview.getURL?.() || '';
+      const title = webview.getTitle?.() || 'New Tab';
       updateTab(tabId, {
         isLoading: false,
-        title: webview.getTitle?.() || 'New Tab',
-        url: webview.getURL?.() || ''
+        title,
+        url
       });
       updateNavStateFor(tabId, webview);
+      
+      // Track in history
+      const tab = useBrowserStore.getState().tabs.find((t) => t.id === tabId);
+      if (tab?.isPrivate) return;
+      if (onNavigate && url && !url.startsWith('lain://')) {
+        onNavigate(url, title);
+      }
     };
 
     const onPageTitleUpdated = (e: any) => {
@@ -81,12 +114,24 @@ export function WebView() {
       if (fav) updateTab(tabId, { favicon: fav });
     };
 
+    // Context menu handler
+    const onContextMenu = (e: any) => {
+      setContextMenu({
+        x: e.params?.x || e.x || 100,
+        y: e.params?.y || e.y || 100,
+        linkUrl: e.params?.linkURL || undefined,
+        imageUrl: e.params?.srcURL || undefined,
+        selectedText: e.params?.selectionText || undefined
+      });
+    };
+
     webview.addEventListener('did-start-loading', onDidStartLoading);
     webview.addEventListener('did-stop-loading', onDidStopLoading);
     webview.addEventListener('page-title-updated', onPageTitleUpdated);
     webview.addEventListener('did-navigate', onDidNavigate);
     webview.addEventListener('did-navigate-in-page', onDidNavigateInPage);
     webview.addEventListener('page-favicon-updated', onPageFaviconUpdated);
+    webview.addEventListener('context-menu', onContextMenu);
 
     // Initial state
     updateNavStateFor(tabId, webview);
@@ -98,21 +143,26 @@ export function WebView() {
       webview.removeEventListener('did-navigate', onDidNavigate);
       webview.removeEventListener('did-navigate-in-page', onDidNavigateInPage);
       webview.removeEventListener('page-favicon-updated', onPageFaviconUpdated);
+      webview.removeEventListener('context-menu', onContextMenu);
     };
-  }, [updateTab, updateNavStateFor]);
+  }, [updateTab, updateNavStateFor, onNavigate]);
 
   // Expose navigation controls for the active tab.
   useEffect(() => {
     if (!activeTabId) {
       setWebviewApi(null);
+      activeWebviewRef.current = null;
       return;
     }
 
     const webview = webviewsByIdRef.current[activeTabId];
     if (!webview) {
       setWebviewApi(null);
+      activeWebviewRef.current = null;
       return;
     }
+
+    activeWebviewRef.current = webview;
 
     setWebviewApi({
       goBack: () => {
@@ -301,7 +351,8 @@ export function WebView() {
           key={tab.id}
           ref={setWebviewRef(tab.id)}
           src={tab.url}
-          allowpopups="true"
+          partition={tab.isPrivate ? 'incognito' : undefined}
+          allowpopups={true as any}
           style={{
             position: 'absolute',
             inset: 0,
@@ -319,6 +370,30 @@ export function WebView() {
           <WelcomePage />
         </div>
       )}
+
+      {/* Find in page */}
+      {showFindInPage && activeWebviewRef.current && (
+        <FindInPage
+          webviewRef={activeWebviewRef as React.RefObject<Electron.WebviewTag>}
+          onClose={() => onCloseFindInPage?.()}
+        />
+      )}
+
+      {/* Context menu */}
+      {contextMenu && activeTab && (
+        <WebViewContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          linkUrl={contextMenu.linkUrl}
+          imageUrl={contextMenu.imageUrl}
+          selectedText={contextMenu.selectedText}
+          pageUrl={activeTab.url}
+          pageTitle={activeTab.title}
+          onClose={() => setContextMenu(null)}
+          onNavigate={(url) => updateTab(activeTabId!, { url, isLoading: true })}
+          onOpenInNewTab={(url) => addTab(url)}
+        />
+      )}
     </div>
   );
-}
+});

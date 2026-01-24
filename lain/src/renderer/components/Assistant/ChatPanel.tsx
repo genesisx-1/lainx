@@ -6,6 +6,91 @@ import { useBrowserStore } from '../../store/browser.store';
 import { ChatSettings } from './ChatSettings';
 import { ChatHistory } from './ChatHistory';
 
+function Icon({
+  name,
+  className = 'w-4 h-4'
+}: {
+  name:
+    | 'history'
+    | 'settings'
+    | 'refresh'
+    | 'close'
+    | 'doc'
+    | 'chat'
+    | 'robot'
+    | 'search'
+    | 'chevronUp'
+    | 'chevronDown';
+  className?: string;
+}) {
+  switch (name) {
+    case 'history':
+      return (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      );
+    case 'settings':
+      return (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      );
+    case 'refresh':
+      return (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 4v6h6M20 20v-6h-6" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 9A9 9 0 006.4 5.6L4 10m0 5a9 9 0 0013.6 3.4L20 14" />
+        </svg>
+      );
+    case 'close':
+      return (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      );
+    case 'doc':
+      return (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z" />
+        </svg>
+      );
+    case 'chat':
+      return (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 10h8M8 14h5m11-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      );
+    case 'robot':
+      return (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 3v3m-6 4h12a3 3 0 013 3v5a3 3 0 01-3 3H6a3 3 0 01-3-3v-5a3 3 0 013-3z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 14h.01M15 14h.01" />
+        </svg>
+      );
+    case 'search':
+      return (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11 19a8 8 0 100-16 8 8 0 000 16z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M21 21l-4.35-4.35" />
+        </svg>
+      );
+    case 'chevronUp':
+      return (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+        </svg>
+      );
+    case 'chevronDown':
+      return (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      );
+  }
+}
+
 export function ChatPanel() {
   const { 
     messages, 
@@ -62,7 +147,8 @@ export function ChatPanel() {
         console.log('[ChatPanel] Models list:', list);
         
         if (cancelled) return;
-        setModels(Array.isArray(list) ? list : []);
+        const normalized = Array.isArray(list) ? list : [];
+        setModels(normalized);
 
         if (!installed) {
           setStatusText('Not installed');
@@ -70,15 +156,27 @@ export function ChatPanel() {
           return;
         }
 
-        if (!list || list.length === 0) {
+        if (!normalized || normalized.length === 0) {
           setStatusText('No models');
           setSelectedModel('');
           return;
         }
 
         setStatusText('Ready');
-        setSelectedModel((prev) => prev || list[0]);
-        console.log('[ChatPanel] AI is ready, model:', list[0]);
+        const preferQwen =
+          normalized.find((m) => m.startsWith('qwen2.5') && m.includes('0.5b')) ||
+          normalized.find((m) => m.toLowerCase().includes('qwen')) ||
+          normalized[0];
+        const preferredFromSettings = settings.preferredModel && normalized.includes(settings.preferredModel)
+          ? settings.preferredModel
+          : '';
+        const next = preferredFromSettings || preferQwen;
+        setSelectedModel((prev) => (prev && normalized.includes(prev) ? prev : next));
+        if (!preferredFromSettings && next) {
+          // persist the detected default for next launch
+          useAIStore.getState().updateSettings({ preferredModel: next });
+        }
+        console.log('[ChatPanel] AI is ready, model:', next);
       } catch (e) {
         console.error('[ChatPanel] Error during AI status check:', e);
         if (!cancelled) {
@@ -94,7 +192,7 @@ export function ChatPanel() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [settings.preferredModel]);
 
   const openAISetup = () => {
     setShowOnboarding(true);
@@ -144,7 +242,7 @@ export function ChatPanel() {
     setLoading(true);
     addMessage({
       role: 'user',
-      content: `📄 Summarize this page: ${activeTab?.title || activeTab?.url}`
+      content: `Summarize this page: ${activeTab?.title || activeTab?.url}`
     });
 
     try {
@@ -213,7 +311,7 @@ export function ChatPanel() {
     
     addMessage({
       role: 'user',
-      content: '🔍 Scanning page for interactive elements...'
+      content: 'Scanning page for interactive elements...'
     });
 
     try {
@@ -400,7 +498,7 @@ export function ChatPanel() {
             className="w-7 h-7 rounded hover:bg-bg-panel flex items-center justify-center text-text-secondary text-xs"
             title="Chat history"
           >
-            📋
+            <Icon name="history" className="w-4 h-4" />
           </button>
           <button
             type="button"
@@ -408,7 +506,7 @@ export function ChatPanel() {
             className="w-7 h-7 rounded hover:bg-bg-panel flex items-center justify-center text-text-secondary text-xs"
             title="Settings"
           >
-            ⚙️
+            <Icon name="settings" className="w-4 h-4" />
           </button>
           <button
             type="button"
@@ -416,7 +514,7 @@ export function ChatPanel() {
             className="w-7 h-7 rounded hover:bg-bg-panel flex items-center justify-center text-text-secondary text-xs"
             title="Refresh AI status"
           >
-            ↻
+            <Icon name="refresh" className="w-4 h-4" />
           </button>
           <button
             type="button"
@@ -424,7 +522,7 @@ export function ChatPanel() {
             className="w-7 h-7 rounded hover:bg-bg-panel flex items-center justify-center text-text-secondary"
             title="Close AI panel"
           >
-            ×
+            <Icon name="close" className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -475,7 +573,11 @@ export function ChatPanel() {
           <label className="text-xs text-text-muted mr-2">Model</label>
           <select
             value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setSelectedModel(v);
+              useAIStore.getState().updateSettings({ preferredModel: v });
+            }}
             className="text-xs bg-bg-secondary border border-border rounded px-2 py-1 text-text-primary"
           >
             {models.map((m) => (
@@ -491,7 +593,12 @@ export function ChatPanel() {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && (
           <div className="text-center text-text-muted mt-8">
-            <p className="text-lg mb-2">👋 Hi! I'm your local AI assistant</p>
+            <div className="flex items-center justify-center gap-2 text-text-primary mb-2">
+              <span className="w-8 h-8 rounded-full bg-accent/15 text-accent flex items-center justify-center">
+                <Icon name="robot" className="w-4 h-4" />
+              </span>
+              <p className="text-lg">Local AI Assistant</p>
+            </div>
             <p className="text-sm">
               {statusText === 'Ready'
                 ? 'Ask me anything about the current page or for help with tasks.'
@@ -541,14 +648,20 @@ export function ChatPanel() {
               disabled={isLoading}
               className="flex-1 px-3 py-2 text-xs bg-accent/20 hover:bg-accent/30 border border-accent/40 rounded-lg text-accent font-medium disabled:opacity-50 transition-colors"
             >
-              📄 Summarize
+              <span className="inline-flex items-center justify-center gap-2">
+                <Icon name="doc" className="w-4 h-4" />
+                Summarize
+              </span>
             </button>
             <button
               onClick={askAboutPage}
               disabled={isLoading}
               className="flex-1 px-3 py-2 text-xs bg-bg-secondary hover:bg-bg-primary border border-border rounded-lg text-text-primary font-medium disabled:opacity-50 transition-colors"
             >
-              💬 Ask
+              <span className="inline-flex items-center justify-center gap-2">
+                <Icon name="chat" className="w-4 h-4" />
+                Ask
+              </span>
             </button>
             <button
               onClick={() => {
@@ -562,7 +675,10 @@ export function ChatPanel() {
                   : 'bg-bg-secondary hover:bg-bg-primary border-border text-text-primary'
               }`}
             >
-              🤖 {agentMode ? 'Agent ON' : 'Agent'}
+              <span className="inline-flex items-center justify-center gap-2">
+                <Icon name="robot" className="w-4 h-4" />
+                {agentMode ? 'Agent ON' : 'Agent'}
+              </span>
             </button>
           </div>
           {agentMode && (
@@ -572,21 +688,24 @@ export function ChatPanel() {
                 disabled={isLoading}
                 className="flex-1 px-2 py-1.5 text-xs bg-bg-secondary hover:bg-bg-primary border border-border rounded text-text-muted"
               >
-                🔍 Rescan
+                <span className="inline-flex items-center justify-center gap-2">
+                  <Icon name="search" className="w-4 h-4" />
+                  Rescan
+                </span>
               </button>
               <button
                 onClick={() => webviewApi?.scrollPage('up')}
                 disabled={isLoading}
                 className="px-2 py-1.5 text-xs bg-bg-secondary hover:bg-bg-primary border border-border rounded text-text-muted"
               >
-                ↑
+                <Icon name="chevronUp" className="w-4 h-4" />
               </button>
               <button
                 onClick={() => webviewApi?.scrollPage('down')}
                 disabled={isLoading}
                 className="px-2 py-1.5 text-xs bg-bg-secondary hover:bg-bg-primary border border-border rounded text-text-muted"
               >
-                ↓
+                <Icon name="chevronDown" className="w-4 h-4" />
               </button>
             </div>
           )}

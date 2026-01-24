@@ -255,7 +255,7 @@ export function ModelManager({ onClose }: ModelManagerProps) {
 
         {/* Terminal tip */}
         <div className="p-3 bg-bg-panel rounded-lg border border-border">
-          <div className="text-xs font-medium text-text-muted mb-1">💡 Power User Tip</div>
+          <div className="text-xs font-medium text-text-muted mb-1">Power User Tip</div>
           <div className="text-xs text-text-secondary">
             You can also manage models from the terminal:
             <code className="block mt-1 p-2 bg-bg-secondary rounded text-accent">

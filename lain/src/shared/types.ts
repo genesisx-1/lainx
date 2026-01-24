@@ -9,6 +9,7 @@ export interface Tab {
   isLoading?: boolean;
   canGoBack?: boolean;
   canGoForward?: boolean;
+  isPrivate?: boolean;
 }
 
 export interface Capsule {

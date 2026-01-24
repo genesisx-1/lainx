@@ -32,7 +32,7 @@ interface BrowserState {
     executeScript: (script: string) => Promise<any>;
   } | null;
   setWebviewApi: (api: BrowserState['webviewApi']) => void;
-  addTab: (url?: string) => void;
+  addTab: (url?: string, options?: { isPrivate?: boolean }) => void;
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
   updateTab: (id: string, updates: Partial<Tab>) => void;
@@ -54,7 +54,8 @@ export const useBrowserStore = create<BrowserState>((set) => ({
   webviewApi: null,
   setWebviewApi: (api) => set({ webviewApi: api }),
 
-  addTab: (url = 'lain://welcome') => {
+  addTab: (url = 'lain://welcome', options) => {
+    const isPrivate = !!options?.isPrivate;
     const newTab: Tab = {
       id: `tab-${Date.now()}`,
       url,
@@ -62,7 +63,8 @@ export const useBrowserStore = create<BrowserState>((set) => ({
       isActive: true,
       isLoading: false,
       canGoBack: false,
-      canGoForward: false
+      canGoForward: false,
+      isPrivate
     };
 
     set((state) => ({
