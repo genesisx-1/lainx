@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback, useMemo } from 'react';
 import { useBrowserStore } from '../../store/browser.store';
 import { WelcomePage } from './WelcomePage';
 
@@ -7,21 +7,34 @@ export function WebView() {
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
   const webviewsByIdRef = useRef<Record<string, any>>({});
   const cleanupByIdRef = useRef<Record<string, (() => void) | undefined>>({});
+  const updateTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
 
-  const updateNavStateFor = (tabId: string, webview: any) => {
-    try {
-      updateTab(tabId, {
-        canGoBack: webview.canGoBack?.() ?? false,
-        canGoForward: webview.canGoForward?.() ?? false
-      });
-    } catch {
-      // ignore
+  const updateNavStateFor = useCallback((tabId: string, webview: any) => {
+    // Debounce navigation state updates to avoid freezing
+    if (updateTimersRef.current[tabId]) {
+      clearTimeout(updateTimersRef.current[tabId]);
     }
-  };
 
-  const setWebviewRef = (tabId: string) => (el: any) => {
+    updateTimersRef.current[tabId] = setTimeout(() => {
+      try {
+        updateTab(tabId, {
+          canGoBack: webview.canGoBack?.() ?? false,
+          canGoForward: webview.canGoForward?.() ?? false
+        });
+      } catch {
+        // ignore
+      }
+      delete updateTimersRef.current[tabId];
+    }, 100);
+  }, [updateTab]);
+
+  const setWebviewRef = useCallback((tabId: string) => (el: any) => {
     // Unmount
     if (!el) {
+      if (updateTimersRef.current[tabId]) {
+        clearTimeout(updateTimersRef.current[tabId]);
+        delete updateTimersRef.current[tabId];
+      }
       cleanupByIdRef.current[tabId]?.();
       delete cleanupByIdRef.current[tabId];
       delete webviewsByIdRef.current[tabId];
@@ -86,17 +99,7 @@ export function WebView() {
       webview.removeEventListener('did-navigate-in-page', onDidNavigateInPage);
       webview.removeEventListener('page-favicon-updated', onPageFaviconUpdated);
     };
-  };
-
-  // Keep each webview's src in sync with its tab url (but preserve session state across tab switches).
-  useEffect(() => {
-    for (const tab of tabs) {
-      if (tab.url === 'lain://welcome') continue;
-      const webview = webviewsByIdRef.current[tab.id];
-      if (!webview) continue;
-      if (webview.src !== tab.url) webview.src = tab.url;
-    }
-  }, [tabs]);
+  }, [updateTab, updateNavStateFor]);
 
   // Expose navigation controls for the active tab.
   useEffect(() => {
@@ -145,7 +148,12 @@ export function WebView() {
     updateNavStateFor(activeTabId, webview);
 
     return () => setWebviewApi(null);
-  }, [activeTabId, setWebviewApi]);
+  }, [activeTabId, setWebviewApi, updateNavStateFor]);
+
+  // Memoize tab URLs to prevent unnecessary updates
+  const tabsToRender = useMemo(() => {
+    return tabs.filter((t) => t.url !== 'lain://welcome');
+  }, [tabs]);
 
   if (!activeTab) {
     return (
@@ -158,24 +166,22 @@ export function WebView() {
   return (
     <div className="w-full h-full bg-bg-primary relative">
       {/* Keep one webview per tab so tab state is preserved */}
-      {tabs
-        .filter((t) => t.url !== 'lain://welcome')
-        .map((tab) => (
-          <webview
-            key={tab.id}
-            ref={setWebviewRef(tab.id)}
-            src={tab.url}
-            allowpopups="true"
-            style={{
-              position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
-              display: tab.isActive ? 'flex' : 'none',
-              background: '#ffffff'
-            }}
-          />
-        ))}
+      {tabsToRender.map((tab) => (
+        <webview
+          key={tab.id}
+          ref={setWebviewRef(tab.id)}
+          src={tab.url}
+          allowpopups="true"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            display: tab.isActive ? 'flex' : 'none',
+            background: '#ffffff'
+          }}
+        />
+      ))}
 
       {/* Welcome page overlays when active tab is welcome */}
       {activeTab.url === 'lain://welcome' && (

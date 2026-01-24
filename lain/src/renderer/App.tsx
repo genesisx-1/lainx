@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import { TabBar } from './components/Browser/TabBar';
 import { AddressBar } from './components/Browser/AddressBar';
 import { WebView } from './components/Browser/WebView';
@@ -6,6 +6,7 @@ import { TerminalPanel } from './components/Terminal/TerminalPanel';
 import { ChatPanel } from './components/Assistant/ChatPanel';
 import { OllamaSetup } from './components/Onboarding/OllamaSetup';
 import { useUIStore } from './store/ui.store';
+import { useBrowserStore } from './store/browser.store';
 import { IPC_CHANNELS } from '../shared/ipc-channels';
 import './styles/globals.css';
 
@@ -19,6 +20,8 @@ export function App() {
     showOnboarding,
     setShowOnboarding
   } = useUIStore();
+  
+  const { addTab } = useBrowserStore();
 
   useEffect(() => {
     // Listen for onboarding event
@@ -29,27 +32,33 @@ export function App() {
     return unsubscribe;
   }, [setShowOnboarding]);
 
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    const isMac = navigator.platform.toLowerCase().includes('mac');
+    const mod = isMac ? e.metaKey : e.ctrlKey;
+
+    // Cmd+` toggles terminal
+    if (mod && e.key === '`') {
+      e.preventDefault();
+      toggleTerminal();
+    }
+
+    // Cmd+Shift+A toggles AI panel
+    if (mod && e.shiftKey && e.key.toLowerCase() === 'a') {
+      e.preventDefault();
+      toggleSidebar();
+    }
+
+    // Cmd+T opens new tab
+    if (mod && e.key.toLowerCase() === 't') {
+      e.preventDefault();
+      addTab();
+    }
+  }, [toggleSidebar, toggleTerminal, addTab]);
+
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      const isMac = navigator.platform.toLowerCase().includes('mac');
-      const mod = isMac ? e.metaKey : e.ctrlKey;
-
-      // Cmd+` toggles terminal
-      if (mod && e.key === '`') {
-        e.preventDefault();
-        toggleTerminal();
-      }
-
-      // Cmd+Shift+A toggles AI panel
-      if (mod && e.shiftKey && e.key.toLowerCase() === 'a') {
-        e.preventDefault();
-        toggleSidebar();
-      }
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [toggleSidebar, toggleTerminal]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   if (showOnboarding) {
     return <OllamaSetup />;

@@ -1,8 +1,17 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { useBrowserStore } from '../../store/browser.store';
 
 export function TabBar() {
   const { tabs, activeTabId, addTab, closeTab, setActiveTab } = useBrowserStore();
+
+  const handleCloseTab = useCallback((e: React.MouseEvent, tabId: string) => {
+    e.stopPropagation();
+    closeTab(tabId);
+  }, [closeTab]);
+
+  const handleAddTab = useCallback(() => {
+    addTab();
+  }, [addTab]);
 
   return (
     <div className="flex items-center h-12 px-2 bg-bg-secondary">
@@ -44,11 +53,9 @@ export function TabBar() {
 
             {/* Close button */}
             <button
+              type="button"
               className="w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-border rounded"
-              onClick={(e) => {
-                e.stopPropagation();
-                closeTab(tab.id);
-              }}
+              onClick={(e) => handleCloseTab(e, tab.id)}
             >
               ×
             </button>
@@ -57,8 +64,9 @@ export function TabBar() {
 
         {/* New tab button */}
         <button
+          type="button"
           className="w-8 h-8 flex items-center justify-center hover:bg-bg-panel rounded text-text-secondary"
-          onClick={() => addTab()}
+          onClick={handleAddTab}
           title="New tab (Cmd+T)"
         >
           +

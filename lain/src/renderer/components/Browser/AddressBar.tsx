@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useBrowserStore } from '../../store/browser.store';
 import { useUIStore } from '../../store/ui.store';
 
@@ -9,12 +9,12 @@ export function AddressBar() {
   const [urlInput, setUrlInput] = useState(activeTab?.url || '');
 
   useEffect(() => {
-    if (activeTab) {
+    if (activeTab && activeTab.url !== 'lain://welcome') {
       setUrlInput(activeTab.url);
     }
-  }, [activeTab]);
+  }, [activeTab?.url]);
 
-  const handleNavigate = (e: React.FormEvent) => {
+  const handleNavigate = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     
     let url = urlInput.trim();
@@ -33,7 +33,23 @@ export function AddressBar() {
     if (activeTabId) {
       updateTab(activeTabId, { url });
     }
-  };
+  }, [urlInput, activeTabId, updateTab]);
+
+  const handleBack = useCallback(() => {
+    webviewApi?.goBack();
+  }, [webviewApi]);
+
+  const handleForward = useCallback(() => {
+    webviewApi?.goForward();
+  }, [webviewApi]);
+
+  const handleReloadOrStop = useCallback(() => {
+    if (activeTab?.isLoading) {
+      webviewApi?.stop();
+    } else {
+      webviewApi?.reload();
+    }
+  }, [activeTab?.isLoading, webviewApi]);
 
   return (
     <div className="flex items-center h-12 px-4 gap-3 bg-bg-primary">
@@ -41,7 +57,7 @@ export function AddressBar() {
       <div className="flex gap-1">
         <button
           type="button"
-          onClick={() => webviewApi?.goBack()}
+          onClick={handleBack}
           disabled={!activeTab?.canGoBack}
           className="w-8 h-8 flex items-center justify-center hover:bg-bg-secondary rounded text-text-secondary disabled:opacity-40 disabled:cursor-not-allowed"
           title="Go back"
@@ -50,7 +66,7 @@ export function AddressBar() {
         </button>
         <button
           type="button"
-          onClick={() => webviewApi?.goForward()}
+          onClick={handleForward}
           disabled={!activeTab?.canGoForward}
           className="w-8 h-8 flex items-center justify-center hover:bg-bg-secondary rounded text-text-secondary disabled:opacity-40 disabled:cursor-not-allowed"
           title="Go forward"
@@ -59,7 +75,7 @@ export function AddressBar() {
         </button>
         <button
           type="button"
-          onClick={() => (activeTab?.isLoading ? webviewApi?.stop() : webviewApi?.reload())}
+          onClick={handleReloadOrStop}
           className="w-8 h-8 flex items-center justify-center hover:bg-bg-secondary rounded text-text-secondary"
           title={activeTab?.isLoading ? 'Stop' : 'Reload'}
         >
@@ -73,7 +89,7 @@ export function AddressBar() {
           type="text"
           value={urlInput}
           onChange={(e) => setUrlInput(e.target.value)}
-          className="w-full h-9 px-4 rounded-lg bg-bg-secondary border border-border text-text-primary text-sm focus:border-accent"
+          className="w-full h-9 px-4 rounded-lg bg-bg-secondary border border-border text-text-primary text-sm focus:border-accent focus:outline-none"
           placeholder="Search or enter URL"
         />
       </form>
