@@ -43,6 +43,14 @@ export const IPC_CHANNELS = {
   DOWNLOAD_PAUSE: 'download:pause',
   DOWNLOAD_RESUME: 'download:resume',
 
+  // Browser navigation (main-process history)
+  BROWSER_NAVIGATE: 'browser:navigate',
+  BROWSER_ADD_HISTORY: 'browser:add-history',
+  BROWSER_BACK: 'browser:back',
+  BROWSER_FORWARD: 'browser:forward',
+  BROWSER_CAN_GO_BACK: 'browser:can-go-back',
+  BROWSER_CAN_GO_FORWARD: 'browser:can-go-forward',
+
   // Window/App
   SHOW_ONBOARDING: 'show-onboarding',
   ONBOARDING_COMPLETE: 'onboarding:complete',

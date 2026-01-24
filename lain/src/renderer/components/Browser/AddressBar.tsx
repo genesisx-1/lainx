@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useBrowserStore } from '../../store/browser.store';
 import { useUIStore } from '../../store/ui.store';
 import { useBookmarksStore } from '../../store/bookmarks.store';
@@ -15,8 +15,11 @@ export function AddressBar({ onHistoryClick, onSettingsClick }: AddressBarProps)
   const [urlInput, setUrlInput] = useState(activeTab?.url || '');
   const [bookmarksOpen, setBookmarksOpen] = useState(false);
   const bookmarksMenuRef = useRef<HTMLDivElement | null>(null);
+  const [bookmarksDropdownPos, setBookmarksDropdownPos] = useState<{ top: number; left: number } | null>(null);
   const [bookmarkBump, setBookmarkBump] = useState(false);
   const [bookmarkToast, setBookmarkToast] = useState<{ key: number; text: string } | null>(null);
+  const bookmarkBumpTimerRef = useRef<number | null>(null);
+  const bookmarkToastTimerRef = useRef<number | null>(null);
 
   const bookmarks = useBookmarksStore((s) => s.bookmarks);
   const isBookmarked = useBookmarksStore((s) => s.isBookmarked);
@@ -30,10 +33,7 @@ export function AddressBar({ onHistoryClick, onSettingsClick }: AddressBarProps)
   }, [activeTab?.url]);
 
   const canBookmark = !!activeTab && activeTab.url !== 'lain://welcome';
-  const bookmarked = useMemo(() => {
-    if (!activeTab) return false;
-    return isBookmarked(activeTab.url);
-  }, [activeTab?.url, isBookmarked]);
+  const bookmarked = activeTab ? isBookmarked(activeTab.url) : false;
 
   const handleNavigate = useCallback((e: React.FormEvent) => {
     e.preventDefault();
@@ -52,7 +52,7 @@ export function AddressBar({ onHistoryClick, onSettingsClick }: AddressBarProps)
     }
 
     if (activeTabId) {
-      updateTab(activeTabId, { url });
+      updateTab(activeTabId, { url, isLoading: true });
     }
   }, [urlInput, activeTabId, updateTab]);
 
@@ -79,22 +79,34 @@ export function AddressBar({ onHistoryClick, onSettingsClick }: AddressBarProps)
 
     // Micro-animation + toast so the user knows it worked.
     // Restart animation even if clicked quickly.
+    if (bookmarkBumpTimerRef.current) window.clearTimeout(bookmarkBumpTimerRef.current);
+    if (bookmarkToastTimerRef.current) window.clearTimeout(bookmarkToastTimerRef.current);
     setBookmarkBump(false);
     requestAnimationFrame(() => setBookmarkBump(true));
-    const bumpTimer = window.setTimeout(() => setBookmarkBump(false), 260);
+    bookmarkBumpTimerRef.current = window.setTimeout(() => setBookmarkBump(false), 260);
 
     const key = Date.now();
     setBookmarkToast({ key, text: wasBookmarked ? 'Removed' : 'Saved' });
-    const toastTimer = window.setTimeout(() => setBookmarkToast(null), 950);
-
-    return () => {
-      window.clearTimeout(bumpTimer);
-      window.clearTimeout(toastTimer);
-    };
+    bookmarkToastTimerRef.current = window.setTimeout(() => setBookmarkToast(null), 950);
   }, [activeTab, canBookmark, toggleBookmark, isBookmarked]);
 
   const handleOpenBookmarks = useCallback(() => {
-    setBookmarksOpen((v) => !v);
+    setBookmarksOpen((v) => {
+      const next = !v;
+      if (next) {
+        const rect = bookmarksMenuRef.current?.getBoundingClientRect();
+        if (rect) {
+          const width = 360;
+          const top = rect.bottom + 12;
+          let left = rect.right - width;
+          left = Math.max(10, Math.min(left, window.innerWidth - width - 10));
+          setBookmarksDropdownPos({ top, left });
+        } else {
+          setBookmarksDropdownPos({ top: 70, left: window.innerWidth - 380 });
+        }
+      }
+      return next;
+    });
   }, []);
 
   const handleOpenBookmarkUrl = useCallback(
@@ -139,10 +151,30 @@ export function AddressBar({ onHistoryClick, onSettingsClick }: AddressBarProps)
     };
   }, [bookmarksOpen]);
 
+  useEffect(() => {
+    // Cleanup timers on unmount
+    return () => {
+      if (bookmarkBumpTimerRef.current) window.clearTimeout(bookmarkBumpTimerRef.current);
+      if (bookmarkToastTimerRef.current) window.clearTimeout(bookmarkToastTimerRef.current);
+    };
+  }, []);
+
   return (
     <div className="relative flex items-center h-12 px-4 gap-3 mt-2 lain-glass rounded-xl">
       {/* Back/Forward buttons */}
       <div className="flex gap-1">
+        <button
+          type="button"
+          onClick={() => {
+            if (activeTabId) updateTab(activeTabId, { url: 'lain://welcome' });
+          }}
+          className="w-9 h-9 flex items-center justify-center hover:bg-bg-secondary/40 rounded-xl text-text-secondary transition-colors"
+          title="Home"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 11l9-8 9 8v10a2 2 0 01-2 2h-4a2 2 0 01-2-2v-6H9v6a2 2 0 01-2 2H5a2 2 0 01-2-2V11z" />
+          </svg>
+        </button>
         <button
           type="button"
           onClick={handleBack}
@@ -245,7 +277,13 @@ export function AddressBar({ onHistoryClick, onSettingsClick }: AddressBarProps)
 
           {/* Bookmarks dropdown */}
           {bookmarksOpen && (
-            <div className="absolute top-full right-0 mt-3 w-[360px] lain-glass rounded-xl overflow-hidden z-50">
+            <div
+              className="fixed mt-0 w-[360px] lain-glass rounded-xl overflow-hidden z-[9999]"
+              style={{
+                top: bookmarksDropdownPos?.top ?? 70,
+                left: bookmarksDropdownPos?.left ?? Math.max(10, window.innerWidth - 380)
+              }}
+            >
               <div className="px-3 py-2 border-b border-border flex items-center justify-between">
                 <div className="text-sm font-medium text-text-primary">Bookmarks</div>
                 <button

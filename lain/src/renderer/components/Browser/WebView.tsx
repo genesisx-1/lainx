@@ -3,6 +3,7 @@ import { useBrowserStore } from '../../store/browser.store';
 import { WelcomePage } from './WelcomePage';
 import { FindInPage } from './FindInPage';
 import { WebViewContextMenu } from './WebViewContextMenu';
+import { IPC_CHANNELS } from '../../../shared/ipc-channels';
 
 interface WebViewProps {
   showFindInPage?: boolean;
@@ -40,14 +41,30 @@ export const WebView = forwardRef<Electron.WebviewTag | null, WebViewProps>(func
     }
 
     updateTimersRef.current[tabId] = setTimeout(() => {
-      try {
-        updateTab(tabId, {
-          canGoBack: webview.canGoBack?.() ?? false,
-          canGoForward: webview.canGoForward?.() ?? false
-        });
-      } catch {
-        // ignore
-      }
+      (async () => {
+        try {
+          const tab = useBrowserStore.getState().tabs.find((t) => t.id === tabId);
+          if (tab?.isPrivate) {
+            updateTab(tabId, {
+              canGoBack: webview.canGoBack?.() ?? false,
+              canGoForward: webview.canGoForward?.() ?? false
+            });
+            return;
+          }
+
+          const [canGoBack, canGoForward] = await Promise.all([
+            window.electron.ipcRenderer.invoke(IPC_CHANNELS.BROWSER_CAN_GO_BACK, tabId),
+            window.electron.ipcRenderer.invoke(IPC_CHANNELS.BROWSER_CAN_GO_FORWARD, tabId)
+          ]);
+
+          updateTab(tabId, {
+            canGoBack: !!canGoBack,
+            canGoForward: !!canGoForward
+          });
+        } catch {
+          // ignore
+        }
+      })();
       delete updateTimersRef.current[tabId];
     }, 100);
   }, [updateTab]);
@@ -92,6 +109,13 @@ export const WebView = forwardRef<Electron.WebviewTag | null, WebViewProps>(func
       if (tab?.isPrivate) return;
       if (onNavigate && url && !url.startsWith('lain://')) {
         onNavigate(url, title);
+      }
+
+      // Main-process navigation history (for back/forward)
+      if (url && !url.startsWith('lain://')) {
+        window.electron.ipcRenderer.invoke(IPC_CHANNELS.BROWSER_ADD_HISTORY, tabId, url, title).catch(() => {
+          // ignore
+        });
       }
     };
 
@@ -167,14 +191,52 @@ export const WebView = forwardRef<Electron.WebviewTag | null, WebViewProps>(func
     setWebviewApi({
       goBack: () => {
         try {
-          if (webview.canGoBack?.()) webview.goBack();
+          const tab = useBrowserStore.getState().tabs.find((t) => t.id === activeTabId);
+          if (tab?.isPrivate) {
+            if (webview.canGoBack?.()) webview.goBack();
+            return;
+          }
+
+          window.electron.ipcRenderer
+            .invoke(IPC_CHANNELS.BROWSER_BACK, activeTabId)
+            .then((url: string | null) => {
+              if (!url) return;
+              updateTab(activeTabId, { url, isLoading: true });
+              try {
+                webview.loadURL?.(url);
+              } catch {
+                // ignore
+              }
+            })
+            .catch(() => {
+              // ignore
+            });
         } finally {
           updateNavStateFor(activeTabId, webview);
         }
       },
       goForward: () => {
         try {
-          if (webview.canGoForward?.()) webview.goForward();
+          const tab = useBrowserStore.getState().tabs.find((t) => t.id === activeTabId);
+          if (tab?.isPrivate) {
+            if (webview.canGoForward?.()) webview.goForward();
+            return;
+          }
+
+          window.electron.ipcRenderer
+            .invoke(IPC_CHANNELS.BROWSER_FORWARD, activeTabId)
+            .then((url: string | null) => {
+              if (!url) return;
+              updateTab(activeTabId, { url, isLoading: true });
+              try {
+                webview.loadURL?.(url);
+              } catch {
+                // ignore
+              }
+            })
+            .catch(() => {
+              // ignore
+            });
         } finally {
           updateNavStateFor(activeTabId, webview);
         }

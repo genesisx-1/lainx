@@ -1,10 +1,18 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useAIStore } from '../../store/ai.store';
 import { IPC_CHANNELS } from '../../../shared/ipc-channels';
 import { useUIStore } from '../../store/ui.store';
 import { useBrowserStore } from '../../store/browser.store';
 import { ChatSettings } from './ChatSettings';
 import { ChatHistory } from './ChatHistory';
+
+type AgentElement = {
+  index: number;
+  tag: string;
+  text: string;
+  type?: string;
+  placeholder?: string;
+};
 
 function Icon({
   name,
@@ -104,7 +112,7 @@ export function ChatPanel() {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { setShowOnboarding, toggleSidebar } = useUIStore();
-  const { webviewApi, tabs, activeTabId } = useBrowserStore();
+  const { webviewApi, tabs, activeTabId, updateTab } = useBrowserStore();
 
   const [ollamaInstalled, setOllamaInstalled] = useState<boolean | null>(null);
   const [models, setModels] = useState<string[]>([]);
@@ -112,6 +120,7 @@ export function ChatPanel() {
   const [statusText, setStatusText] = useState<string>('Checking…');
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [lastScannedElements, setLastScannedElements] = useState<AgentElement[]>([]);
   
   // Check if we're on a real page (not welcome page)
   const activeTab = tabs.find((t) => t.id === activeTabId);
@@ -127,6 +136,16 @@ export function ChatPanel() {
 
   useEffect(() => {
     let cancelled = false;
+
+    const chooseDefaultModel = (list: string[], preferred: string) => {
+      if (preferred && list.includes(preferred)) return preferred;
+      return (
+        list.find((m) => m.startsWith('qwen2.5') && m.includes('0.5b')) ||
+        list.find((m) => m.toLowerCase().includes('qwen')) ||
+        list[0] ||
+        ''
+      );
+    };
 
     async function refreshAIStatus() {
       try {
@@ -163,17 +182,9 @@ export function ChatPanel() {
         }
 
         setStatusText('Ready');
-        const preferQwen =
-          normalized.find((m) => m.startsWith('qwen2.5') && m.includes('0.5b')) ||
-          normalized.find((m) => m.toLowerCase().includes('qwen')) ||
-          normalized[0];
-        const preferredFromSettings = settings.preferredModel && normalized.includes(settings.preferredModel)
-          ? settings.preferredModel
-          : '';
-        const next = preferredFromSettings || preferQwen;
+        const next = chooseDefaultModel(normalized, settings.preferredModel);
         setSelectedModel((prev) => (prev && normalized.includes(prev) ? prev : next));
-        if (!preferredFromSettings && next) {
-          // persist the detected default for next launch
+        if (next && next !== settings.preferredModel) {
           useAIStore.getState().updateSettings({ preferredModel: next });
         }
         console.log('[ChatPanel] AI is ready, model:', next);
@@ -205,9 +216,15 @@ export function ChatPanel() {
       const list: string[] = await window.electron.ipcRenderer.invoke(
         IPC_CHANNELS.OLLAMA_LIST_MODELS
       );
-      setModels(Array.isArray(list) ? list : []);
-      if (list?.length) {
-        setSelectedModel(list[0]);
+      const normalized = Array.isArray(list) ? list : [];
+      setModels(normalized);
+      if (normalized?.length) {
+        const next =
+          (settings.preferredModel && normalized.includes(settings.preferredModel) && settings.preferredModel) ||
+          normalized.find((m) => m.startsWith('qwen2.5') && m.includes('0.5b')) ||
+          normalized.find((m) => m.toLowerCase().includes('qwen')) ||
+          normalized[0];
+        setSelectedModel(next);
         setStatusText('Ready');
       } else {
         setStatusText('No models');
@@ -315,11 +332,12 @@ export function ChatPanel() {
     });
 
     try {
-      const elements = await webviewApi.getInteractiveElements();
+      const elements = (await webviewApi.getInteractiveElements()) as AgentElement[];
+      setLastScannedElements(Array.isArray(elements) ? elements : []);
       
       // Build a description for the AI
-      const elementList = elements.map((el, i) => 
-        `[${i}] ${el.tag}${el.type ? ` (${el.type})` : ''}: "${el.text || el.placeholder || 'no text'}"`
+      const elementList = elements.map((el) => 
+        `[${el.index}] ${el.tag}${el.type ? ` (${el.type})` : ''}: "${el.text || el.placeholder || 'no text'}"`
       ).join('\n');
 
       addMessage({
@@ -331,6 +349,122 @@ export function ChatPanel() {
         role: 'assistant',
         content: 'Failed to scan the page for elements.'
       });
+    }
+  };
+
+  const agentContextText = useMemo(() => {
+    if (!agentMode) return '';
+    if (!canAnalyzePage) return '';
+    if (!lastScannedElements.length) return '';
+    return lastScannedElements
+      .slice(0, 60)
+      .map(
+        (el) =>
+          `[${el.index}] ${el.tag}${el.type ? ` (${el.type})` : ''}: "${(el.text || el.placeholder || 'no text')
+            .slice(0, 60)
+            .replace(/\s+/g, ' ')
+            .trim()}"`
+      )
+      .join('\n');
+  }, [agentMode, canAnalyzePage, lastScannedElements]);
+
+  function extractJsonObject(text: string): any | null {
+    const trimmed = (text || '').trim();
+    const start = trimmed.indexOf('{');
+    const end = trimmed.lastIndexOf('}');
+    if (start === -1 || end === -1 || end <= start) return null;
+    const candidate = trimmed.slice(start, end + 1);
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      return null;
+    }
+  }
+
+  const runAiAgent = async (userInput: string) => {
+    if (!selectedModel) return false;
+    if (!webviewApi) return false;
+    if (!agentContextText) return false;
+
+    setLoading(true);
+    try {
+      const url = activeTab?.url || '';
+      const title = activeTab?.title || '';
+      const response = await window.electron.ipcRenderer.invoke(
+        IPC_CHANNELS.AI_CHAT,
+        [
+          {
+            role: 'system',
+            content:
+              'You are a browser automation agent. Choose exactly ONE action and output ONLY a JSON object. ' +
+              'Allowed actions: click, type, scroll, rescan, navigate. ' +
+              'Schema: ' +
+              '{"action":"click","index":NUMBER} | {"action":"type","index":NUMBER,"text":"..."} | {"action":"scroll","direction":"up"|"down"} | {"action":"rescan"} | {"action":"navigate","url":"https://..."}.' +
+              ' Use the element indices exactly as provided.',
+          },
+          {
+            role: 'user',
+            content: `Page: ${title}\nURL: ${url}\n\nInteractive elements:\n${agentContextText}\n\nUser request: ${userInput}`,
+          },
+        ],
+        selectedModel
+      );
+
+      const content = response?.message?.content || '';
+      const actionObj = extractJsonObject(content);
+      if (!actionObj || !actionObj.action) {
+        addMessage({
+          role: 'assistant',
+          content:
+            'Agent could not interpret that request. Try: "click element 12", "type \\"hello\\" in element 7", "scroll down", or click Rescan first.',
+        });
+        return true;
+      }
+
+      const action = String(actionObj.action);
+      if (action === 'click') {
+        const idx = Number(actionObj.index);
+        const ok = Number.isFinite(idx) ? await webviewApi.clickElement(idx) : false;
+        addMessage({ role: 'assistant', content: ok ? `Clicked element ${idx}.` : `Failed to click element ${idx}.` });
+        setTimeout(scanPage, 800);
+        return true;
+      }
+      if (action === 'type') {
+        const idx = Number(actionObj.index);
+        const text = typeof actionObj.text === 'string' ? actionObj.text : '';
+        const ok = Number.isFinite(idx) && text ? await webviewApi.typeInElement(idx, text) : false;
+        addMessage({ role: 'assistant', content: ok ? `Typed into element ${idx}.` : `Failed to type into element ${idx}.` });
+        setTimeout(scanPage, 800);
+        return true;
+      }
+      if (action === 'scroll') {
+        const dir = actionObj.direction === 'up' ? 'up' : 'down';
+        await webviewApi.scrollPage(dir);
+        addMessage({ role: 'assistant', content: `Scrolled ${dir}.` });
+        return true;
+      }
+      if (action === 'navigate') {
+        const nextUrl = typeof actionObj.url === 'string' ? actionObj.url.trim() : '';
+        if (nextUrl && activeTabId) {
+          updateTab(activeTabId, { url: nextUrl, isLoading: true });
+          addMessage({ role: 'assistant', content: `Navigating to ${nextUrl}` });
+          return true;
+        }
+        addMessage({ role: 'assistant', content: 'Could not navigate: missing URL.' });
+        return true;
+      }
+      if (action === 'rescan') {
+        await scanPage();
+        return true;
+      }
+
+      addMessage({ role: 'assistant', content: `Unsupported agent action: ${action}` });
+      return true;
+    } catch {
+      addMessage({ role: 'assistant', content: 'Agent failed to run. Try Rescan and then ask again.' });
+      return true;
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -346,7 +480,7 @@ export function ChatPanel() {
       const success = await webviewApi.clickElement(idx);
       addMessage({
         role: 'assistant',
-        content: success ? `✅ Clicked element ${idx}` : `❌ Failed to click element ${idx}`
+        content: success ? `Clicked element ${idx}.` : `Failed to click element ${idx}.`
       });
       // Re-scan after action
       setTimeout(scanPage, 1000);
@@ -361,7 +495,7 @@ export function ChatPanel() {
       const success = await webviewApi.typeInElement(idx, text);
       addMessage({
         role: 'assistant',
-        content: success ? `✅ Typed "${text}" in element ${idx}` : `❌ Failed to type in element ${idx}`
+        content: success ? `Typed \"${text}\" in element ${idx}.` : `Failed to type in element ${idx}.`
       });
       return true;
     }
@@ -369,12 +503,12 @@ export function ChatPanel() {
     // Scroll command
     if (lowerCmd.includes('scroll down')) {
       await webviewApi.scrollPage('down');
-      addMessage({ role: 'assistant', content: '✅ Scrolled down' });
+      addMessage({ role: 'assistant', content: 'Scrolled down.' });
       return true;
     }
     if (lowerCmd.includes('scroll up')) {
       await webviewApi.scrollPage('up');
-      addMessage({ role: 'assistant', content: '✅ Scrolled up' });
+      addMessage({ role: 'assistant', content: 'Scrolled up.' });
       return true;
     }
 
@@ -392,6 +526,9 @@ export function ChatPanel() {
       
       const handled = await executeAgentCommand(userInput);
       if (handled) return;
+
+      const aiHandled = await runAiAgent(userInput);
+      if (aiHandled) return;
     }
 
     if (!ollamaInstalled) {

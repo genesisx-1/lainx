@@ -3,7 +3,10 @@ import { TerminalService } from './services/terminal.service';
 import { AIService } from './services/ai.service';
 import { OllamaManagerService } from './services/ollama-manager.service';
 import { StorageService } from './services/storage.service';
+import { HistoryService } from './services/history.service';
 import { IPC_CHANNELS } from '../shared/ipc-channels';
+
+const historyService = new HistoryService();
 
 export function registerIPCHandlers(
   terminalService: TerminalService,
@@ -176,5 +179,32 @@ export function registerIPCHandlers(
 
   ipcMain.handle(IPC_CHANNELS.STORAGE_GET_BOOKMARKS, async () => {
     return storageService.getBookmarks();
+  });
+
+  // Browser navigation history (main-process)
+  ipcMain.handle(IPC_CHANNELS.BROWSER_NAVIGATE, async (_event, _tabId: string, _url: string) => {
+    // webview handles actual navigation; keep this for symmetry/future
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.BROWSER_ADD_HISTORY, async (_event, tabId: string, url: string, title: string) => {
+    historyService.addEntry(tabId, url, title);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.BROWSER_BACK, async (_event, tabId: string) => {
+    return historyService.goBack(tabId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.BROWSER_FORWARD, async (_event, tabId: string) => {
+    return historyService.goForward(tabId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.BROWSER_CAN_GO_BACK, async (_event, tabId: string) => {
+    return historyService.canGoBack(tabId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.BROWSER_CAN_GO_FORWARD, async (_event, tabId: string) => {
+    return historyService.canGoForward(tabId);
   });
 }
