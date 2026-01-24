@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeImage } from 'electron';
 import * as path from 'path';
 import { TerminalService } from './services/terminal.service';
 import { AIService } from './services/ai.service';
@@ -15,6 +15,15 @@ const aiService = new AIService();
 const ollamaManagerService = new OllamaManagerService();
 const storageService = new StorageService();
 
+function getAppIconPath(): string {
+  // In packaged builds, we bundle project `resources/` into `process.resourcesPath/resources`.
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'resources', 'icon.png');
+  }
+  // In dev, Electron runs from the project root; use project `resources/`.
+  return path.join(process.cwd(), 'resources', 'icon.png');
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -22,6 +31,8 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     backgroundColor: '#0a0a0a',
+    // Affects window icon on Windows/Linux; on macOS the app icon is from the bundle.
+    icon: getAppIconPath(),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -71,6 +82,17 @@ registerIPCHandlers(terminalService, aiService, ollamaManagerService, storageSer
 
 // App lifecycle
 app.whenReady().then(() => {
+  // In dev on macOS, Electron shows the default icon unless we set it explicitly.
+  if (process.platform === 'darwin') {
+    try {
+      const img = nativeImage.createFromPath(getAppIconPath());
+      if (!img.isEmpty()) {
+        app.dock.setIcon(img);
+      }
+    } catch {
+      // ignore
+    }
+  }
   createWindow();
 
   app.on('activate', () => {

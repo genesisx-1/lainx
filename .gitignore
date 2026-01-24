@@ -21,11 +21,21 @@ build/
 out/
 .vite/
 
+### Electron builder outputs (large artifacts)
+lain/release/
+*.dmg
+*.dmg.blockmap
+*.zip
+*.zip.blockmap
+
 ### TypeScript
 *.tsbuildinfo
 
 ### Coverage
 coverage/
+
+### Generated icon intermediates
+lain/resources/icon.iconset/
 
 ### Editor / tooling
 .idea/

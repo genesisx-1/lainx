@@ -11,12 +11,93 @@
     "build": "npm run build:vite && npm run build:electron",
     "build:vite": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
+    "icons": "node scripts/generate-icon.js",
+    "build:mac": "npm run build && npm run icons && electron-builder --mac",
+    "build:win": "npm run build && npm run icons && electron-builder --win",
+    "build:linux": "npm run build && npm run icons && electron-builder --linux",
+    "build:all": "npm run build && npm run icons && electron-builder -mwl",
     "postinstall": "node -e \"const fs=require('fs'); const path=require('path'); const bases=['darwin-arm64','darwin-x64']; for(const b of bases){const p=path.join(process.cwd(),'node_modules','node-pty','prebuilds',b,'spawn-helper'); if(fs.existsSync(p)) { try { fs.chmodSync(p,0o755); } catch(e){} }}\"",
     "start": "electron ."
   },
   "keywords": ["electron", "browser", "terminal", "ai", "ollama"],
   "author": "",
   "license": "ISC",
+  "build": {
+    "appId": "com.lain.browser",
+    "productName": "LAIN",
+    "directories": {
+      "output": "release"
+    },
+    "afterSign": "scripts/after-sign.js",
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources"
+      }
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/node-pty/**/*",
+      "node_modules/better-sqlite3/**/*"
+    ],
+    "mac": {
+      "icon": "resources/icon.icns",
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "win": {
+      "icon": "resources/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "linux": {
+      "icon": "resources/icon.png",
+      "category": "Network",
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    }
+  },
   "dependencies": {
     "@huggingface/transformers": "^3.1.0",
     "better-sqlite3": "^11.7.0",
@@ -39,7 +120,10 @@
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
     "electron": "^28.1.0",
+    "electron-builder": "^26.0.12",
+    "png-to-ico": "^2.1.8",
     "postcss": "^8.4.32",
+    "sharp": "^0.34.3",
     "tailwindcss": "^3.4.0",
     "typescript": "^5.3.3",
     "vite": "^5.0.10"
