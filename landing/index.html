@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="LAIN — a productivity browser with an integrated terminal and local AI." />
+    <title>LAIN — Browser + Terminal + Local AI</title>
+    <style>
+      :root {
+        --bg: #07070a;
+        --panel: rgba(255, 255, 255, 0.06);
+        --panel2: rgba(255, 255, 255, 0.085);
+        --border: rgba(255, 255, 255, 0.12);
+        --text: rgba(255, 255, 255, 0.92);
+        --muted: rgba(255, 255, 255, 0.64);
+        --muted2: rgba(255, 255, 255, 0.48);
+        --accent: #8b5cf6;
+        --accent2: #22d3ee;
+        --danger: #fb7185;
+        --ok: #34d399;
+        --shadow: 0 22px 80px rgba(0, 0, 0, 0.65);
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        color: var(--text);
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+        background:
+          radial-gradient(1200px 800px at 20% 10%, rgba(139, 92, 246, 0.28), transparent 55%),
+          radial-gradient(900px 600px at 85% 25%, rgba(34, 211, 238, 0.18), transparent 55%),
+          radial-gradient(900px 900px at 60% 95%, rgba(139, 92, 246, 0.12), transparent 60%),
+          var(--bg);
+        overflow-x: hidden;
+      }
+      a { color: inherit; text-decoration: none; }
+      .container { max-width: 1100px; margin: 0 auto; padding: 28px 22px 70px; }
+      .nav {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        background: linear-gradient(180deg, var(--panel), rgba(255,255,255,0.03));
+        border-radius: 16px;
+        box-shadow: var(--shadow);
+        position: sticky; top: 14px; z-index: 50;
+        backdrop-filter: blur(10px);
+      }
+      .brand { display: flex; align-items: baseline; gap: 10px; }
+      .brand .mark {
+        font-weight: 900;
+        letter-spacing: 0.28em;
+        color: rgba(255,255,255,0.94);
+        font-size: 14px;
+      }
+      .brand .tag { font-size: 12px; color: var(--muted); }
+      .nav .links { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+      .chip {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 8px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(255,255,255,0.05);
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .btn {
+        cursor: pointer;
+        border: 1px solid rgba(255,255,255,0.14);
+        background: rgba(255,255,255,0.06);
+        color: rgba(255,255,255,0.86);
+        padding: 10px 12px;
+        border-radius: 12px;
+        font-weight: 650;
+        font-size: 13px;
+        transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+      }
+      .btn:hover { transform: translateY(-1px); background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); }
+      .btn.primary {
+        border-color: rgba(139, 92, 246, 0.55);
+        background: linear-gradient(135deg, rgba(139,92,246,0.85), rgba(34,211,238,0.35));
+        color: rgba(255,255,255,0.94);
+      }
+      .btn.primary:hover { border-color: rgba(139, 92, 246, 0.8); }
+      .hero { padding: 46px 6px 24px; display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 26px; align-items: start; }
+      @media (max-width: 920px) { .hero { grid-template-columns: 1fr; } }
+      .h1 {
+        font-size: 54px;
+        line-height: 1.04;
+        margin: 0 0 14px;
+        letter-spacing: -0.02em;
+      }
+      .sub {
+        margin: 0 0 18px;
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1.55;
+      }
+      .kbs { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 0; }
+      .kbd {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 8px 10px;
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.14);
+        background: rgba(255,255,255,0.06);
+        color: rgba(255,255,255,0.82);
+        font-size: 12px;
+      }
+      .kbd code { color: rgba(255,255,255,0.9); font-weight: 700; }
+      .panel {
+        border: 1px solid var(--border);
+        background: linear-gradient(180deg, var(--panel2), rgba(255,255,255,0.03));
+        border-radius: 18px;
+        padding: 16px;
+        backdrop-filter: blur(10px);
+        box-shadow: var(--shadow);
+      }
+      .mock {
+        height: 340px;
+        border-radius: 14px;
+        border: 1px solid rgba(255,255,255,0.14);
+        overflow: hidden;
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02)),
+          radial-gradient(900px 600px at 20% 15%, rgba(139,92,246,0.22), transparent 55%),
+          radial-gradient(900px 600px at 80% 15%, rgba(34,211,238,0.14), transparent 55%),
+          rgba(0,0,0,0.2);
+        position: relative;
+      }
+      .mock .bar {
+        height: 42px; display: flex; align-items: center; gap: 10px;
+        padding: 0 12px;
+        border-bottom: 1px solid rgba(255,255,255,0.12);
+        background: rgba(0,0,0,0.25);
+      }
+      .dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.25); }
+      .addr {
+        flex: 1;
+        height: 28px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(255,255,255,0.06);
+      }
+      .mock .body { padding: 14px; display: grid; gap: 10px; }
+      .line { height: 10px; border-radius: 999px; background: rgba(255,255,255,0.10); }
+      .line.w60 { width: 60%; }
+      .line.w80 { width: 80%; }
+      .line.w40 { width: 40%; }
+      .terminal {
+        margin-top: 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.14);
+        background: rgba(0,0,0,0.35);
+        padding: 12px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+        font-size: 12px;
+        color: rgba(255,255,255,0.82);
+      }
+      .terminal .prompt { color: rgba(34,211,238,0.85); }
+      .terminal .cmd { color: rgba(255,255,255,0.92); }
+      .terminal .out { color: rgba(255,255,255,0.66); }
+      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 18px; }
+      @media (max-width: 920px) { .grid { grid-template-columns: 1fr; } }
+      .card {
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(255,255,255,0.05);
+        border-radius: 16px;
+        padding: 14px;
+      }
+      .card .t { font-weight: 750; margin: 0 0 6px; }
+      .card .d { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+      .section { margin-top: 28px; }
+      .section h2 { margin: 0 0 10px; font-size: 18px; letter-spacing: -0.01em; }
+      .section p { margin: 0; color: var(--muted); line-height: 1.55; }
+      .footer {
+        margin-top: 40px;
+        padding-top: 18px;
+        border-top: 1px solid rgba(255,255,255,0.12);
+        color: var(--muted2);
+        font-size: 12px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+      }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace; }
+      .pillrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+      .pill { padding: 6px 8px; border-radius: 999px; font-size: 12px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <!-- React in a single HTML file (CDN + inline JSX via Babel). -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+      const { useMemo, useState } = React;
+
+      function App() {
+        const [copied, setCopied] = useState(false);
+        const repo = "https://github.com/genesisx-1/lainx";
+
+        const features = useMemo(() => ([
+          { t: "Browser + Terminal", d: "A real browser with a real terminal docked below it. Run commands without context switching." },
+          { t: "Local AI via Ollama", d: "Chat locally, pick models, and keep your data on-device." },
+          { t: "Focus Mode", d: "Timer + blocklist + Break Glass + one-tab lock to keep you on task." },
+          { t: "Capsules", d: "Save/restore full workspaces (tabs, layout, AI state, terminal CWD) and export/import them." },
+          { t: "Native Terminal Handoff", d: "Continue in iTerm2/Warp: opens same folder and reruns your last command." },
+          { t: "Browser ↔ Terminal", d: "Run selected text in terminal (with safety confirmation). Terminal URLs are clickable." },
+        ]), []);
+
+        async function copy(text) {
+          try {
+            await navigator.clipboard.writeText(text);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 900);
+          } catch {}
+        }
+
+        return (
+          <div className="container">
+            <div className="nav">
+              <div className="brand">
+                <div className="mark">LAIN</div>
+                <div className="tag">Browser + Terminal + Local AI</div>
+              </div>
+              <div className="links">
+                <span className="chip">macOS • Windows • Linux</span>
+                <a className="btn" href={repo} target="_blank" rel="noreferrer">GitHub</a>
+                <button className="btn primary" onClick={() => copy("npm run dev")}>
+                  {copied ? "Copied!" : "Copy: npm run dev"}
+                </button>
+              </div>
+            </div>
+
+            <div className="hero">
+              <div>
+                <h1 className="h1">A productivity workspace disguised as a browser.</h1>
+                <p className="sub">
+                  LAIN combines a full Chromium browser, a real terminal, and local AI into one focused desktop app.
+                  Save workspaces as Capsules, lock in with Focus Mode, and hand off to iTerm2/Warp when you need native power.
+                </p>
+                <div className="pillrow">
+                  <span className="pill">Cmd+K command palette</span>
+                  <span className="pill">Terminal URLs clickable</span>
+                  <span className="pill">Continue in iTerm2/Warp</span>
+                  <span className="pill">Capsules export/import</span>
+                </div>
+                <div className="kbs">
+                  <span className="kbd"><code>Cmd</code>+<code>K</code> Command palette</span>
+                  <span className="kbd"><code>Cmd</code>+<code>`</code> Toggle terminal</span>
+                  <span className="kbd"><code>Cmd</code>+<code>F</code> Find in page</span>
+                  <span className="kbd"><code>Cmd</code>+<code>+</code>/<code>-</code>/<code>0</code> Zoom</span>
+                </div>
+                <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <a className="btn primary" href={repo} target="_blank" rel="noreferrer">View source</a>
+                  <button className="btn" onClick={() => copy("npm install && npm run dev")}>Copy: install + dev</button>
+                </div>
+              </div>
+
+              <div className="panel">
+                <div className="mock" aria-label="Product mock">
+                  <div className="bar">
+                    <span className="dot" style={{ background: "rgba(255,255,255,0.22)" }}></span>
+                    <span className="dot" style={{ background: "rgba(255,255,255,0.18)" }}></span>
+                    <span className="dot" style={{ background: "rgba(255,255,255,0.14)" }}></span>
+                    <div className="addr"></div>
+                  </div>
+                  <div className="body">
+                    <div className="line w80"></div>
+                    <div className="line w60"></div>
+                    <div className="line w40"></div>
+                    <div className="terminal">
+                      <div><span className="prompt">lain</span> <span className="out">~/proj</span> <span className="cmd">$</span> <span className="cmd">echo https://example.com</span></div>
+                      <div className="out">https://example.com</div>
+                      <div style={{ marginTop: 8 }}><span className="prompt">lain</span> <span className="out">~/proj</span> <span className="cmd">$</span> <span className="cmd">Continue in iTerm2</span> <span className="out">(same CWD + last cmd)</span></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid">
+                  {features.slice(0, 3).map((f) => (
+                    <div className="card" key={f.t}>
+                      <p className="t">{f.t}</p>
+                      <p className="d">{f.d}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="section panel">
+              <h2>What makes LAIN different</h2>
+              <p>
+                Most browsers treat the terminal and automation as external tools. LAIN makes them first-class:
+                capture intent with a command palette, run/inspect commands without leaving context, and keep focus with real enforcement.
+              </p>
+              <div className="grid" style={{ marginTop: 14 }}>
+                {features.slice(3).map((f) => (
+                  <div className="card" key={f.t}>
+                    <p className="t">{f.t}</p>
+                    <p className="d">{f.d}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="footer">
+              <div>
+                <span className="mono">LAIN</span> — built with Electron + React + xterm.js
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <a className="btn" href={repo} target="_blank" rel="noreferrer">GitHub Repo</a>
+                <button className="btn" onClick={() => copy(repo)}>Copy repo URL</button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById("app")).render(<App />);
+    </script>
+  </body>
+</html>
+
