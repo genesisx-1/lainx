@@ -6,9 +6,11 @@ A productivity-focused desktop browser with integrated terminal and local AI ass
 
 - **Chromium Browser** - Full-featured web browsing with tabs
 - **Integrated Terminal** - Real bash/zsh terminal with xterm.js
-- **Local AI Assistant** - Ollama-powered AI that runs on your machine
-- **Native Terminal Bridge** - Open sessions in iTerm2, Warp, or other terminal apps
-- **Browser ↔ Terminal Integration** - Seamless connection between browsing and command-line work
+- **Local AI Assistant** - Ollama-powered AI that runs on your machine (auto-install + model download onboarding)
+- **Native Terminal Bridge** - Open in iTerm2/Warp/Terminal and **Continue** (same folder + last command)
+- **Browser ↔ Terminal Integration** - Run selected text in terminal; terminal URLs are clickable
+- **Focus Mode** - Timer + blocklist + Break Glass + single-tab lock
+- **Capsules** - Save/restore workspaces; manage/export/import capsules
 
 ## Tech Stack
 
@@ -35,12 +37,21 @@ A productivity-focused desktop browser with integrated terminal and local AI ass
 npm install
 
 # Start development server
-./dev.sh
+npm run dev
 
-# Or manually:
-# Terminal 1: npm run dev:vite
-# Terminal 2: NODE_ENV=development npx electron .
+# (Optional) build main process only
+# npm run build:electron
 ```
+
+## Keyboard Shortcuts
+
+- **Cmd+K**: Command palette
+- **Cmd+`**: Toggle terminal
+- **Cmd+Shift+A**: Toggle AI sidebar
+- **Cmd+T / Cmd+W**: New / close tab (disabled in Focus Mode)
+- **Cmd+F**: Find in page
+- **Cmd+Y**: History
+- **Cmd++ / Cmd+- / Cmd+0**: Zoom in / out / reset
 
 ### Project Structure
 
@@ -64,36 +75,42 @@ lain/
 ## Building
 
 ```bash
-# Build for production
+# Build for production (macOS)
 npm run build
+
+# Build for Windows (requires building on Windows machine)
+npm run build:win
+
+# Build for Linux
+npm run build:linux
+
+# Build for all platforms (requires platform-specific machines)
+npm run build:all
 
 # Start production app
 npm start
 ```
 
-## Current Status (MVP - Week 1)
+## Building for Windows
 
-✅ Project structure created
-✅ Electron + React setup
-✅ Terminal service with native app integration
-✅ Ollama manager service
-✅ AI service
-✅ Storage service (electron-store)
-✅ IPC communication layer
-✅ Browser UI (tabs, address bar, webview)
-✅ Terminal panel with xterm.js
-✅ AI chat sidebar
-✅ Onboarding for Ollama setup
+Building for Windows requires compilation on a Windows machine due to native dependencies like `node-pty`. Cross-compilation from macOS/Linux is not supported.
 
-### Next Steps
+For detailed Windows build instructions, see [BUILD_WINDOWS.md](BUILD_WINDOWS.md).
 
-- [ ] Test terminal command execution
-- [ ] Test Ollama installation flow
-- [ ] Implement terminal search (/)
-- [ ] Add browser → terminal integration
-- [ ] Add terminal → browser URL detection
-- [ ] Implement Focus Mode
-- [ ] Add Capsules/workspaces
+## Platform Support
+
+- **macOS**: Full support for development and building
+- **Windows**: Requires building on Windows machine due to native modules
+- **Linux**: Full support for development and building
+
+## Current Status
+
+This repo has working implementations of:
+- browser tabs + context menu + downloads + find-in-page
+- integrated terminal (history search via `/`, clickable URLs)
+- local AI onboarding (Ollama auto-install + model pulls)
+- Focus Mode enforcement
+- Capsules (save/restore + manage/export/import)
 
 ## Notes
 

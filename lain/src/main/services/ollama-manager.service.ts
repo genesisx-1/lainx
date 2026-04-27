@@ -180,7 +180,8 @@ export class OllamaManagerService {
     onProgress: (progress: number) => void
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const binaryPath = 'ollama'; // Use PATH-based ollama
+      // Use the same resolved binary we use for `serve` so app-managed installs work.
+      const binaryPath = this.getResolvedBinaryOrDefault();
       
       console.log(`[OllamaManager] Starting download of model: ${modelName}`);
       onProgress(1); // Show we've started
@@ -251,7 +252,7 @@ export class OllamaManagerService {
 
     // Fallback to CLI
     return new Promise((resolve) => {
-      const child = spawn('ollama', ['list']);
+      const child = spawn(this.getResolvedBinaryOrDefault(), ['list']);
       let output = '';
       
       child.stdout?.on('data', (data) => {
@@ -317,6 +318,16 @@ export class OllamaManagerService {
 
     // Fallback to previous logic (may still work on some systems).
     return this.getOllamaBinaryPath();
+  }
+
+  // Best-effort: return app-managed path if present; else PATH `ollama`; else legacy fallback.
+  // This is sync so it can be used inside Promise constructors.
+  private getResolvedBinaryOrDefault(): string {
+    const appBinaryPath = this.getAppManagedBinaryPath();
+    if (appBinaryPath && fs.existsSync(appBinaryPath)) return appBinaryPath;
+    const legacy = this.getOllamaBinaryPath();
+    if (legacy && fs.existsSync(legacy)) return legacy;
+    return 'ollama'; // hope it's on PATH
   }
 
   private async waitForServer(maxAttempts = 30): Promise<void> {

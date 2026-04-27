@@ -5,6 +5,7 @@ import * as fs from 'fs';
 
 export class TerminalService {
   private terminals = new Map<string, pty.IPty>();
+  private lastCommands = new Map<string, string>();
 
   createTerminal(id: string, cwd?: string) {
     const shell = this.getDefaultShell();
@@ -61,6 +62,30 @@ export class TerminalService {
       terminal.kill();
       this.terminals.delete(id);
     }
+    this.lastCommands.delete(id);
+  }
+
+  setLastCommand(id: string, command: string) {
+    const trimmed = (command || '').trim();
+    if (!trimmed) return;
+    this.lastCommands.set(id, trimmed);
+  }
+
+  getLastCommand(id: string): string | null {
+    return this.lastCommands.get(id) || null;
+  }
+
+  async getTerminalCwd(id: string): Promise<string | null> {
+    const terminal = this.terminals.get(id);
+    if (!terminal) return null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const pidCwd = require('pid-cwd');
+      const cwd = await pidCwd(terminal.pid);
+      return typeof cwd === 'string' && cwd.trim() ? cwd.trim() : null;
+    } catch {
+      return null;
+    }
   }
 
   private getDefaultShell(): string {
@@ -106,7 +131,7 @@ export class TerminalService {
   ): Promise<void> {
     // Detect available terminal apps
     const terminalApps = [
-      { name: 'iTerm', bundle: 'com.googlecode.iterm2' },
+      { name: 'iTerm2', bundle: 'com.googlecode.iterm2' },
       { name: 'Warp', bundle: 'dev.warp.Warp-Stable' },
       { name: 'Hyper', bundle: 'co.zeit.hyper' },
       { name: 'Terminal', bundle: 'com.apple.Terminal' }
@@ -149,10 +174,18 @@ export class TerminalService {
     cwd: string,
     command?: string
   ): string {
-    const cdCommand = `cd "${cwd}"`;
-    const fullCommand = command ? `${cdCommand} && ${command}` : cdCommand;
+    const escapeAppleScriptString = (s: string) =>
+      (s || '')
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, ' ')
+        .replace(/\r/g, ' ');
 
-    if (appName === 'iTerm') {
+    const cdCommand = `cd "${escapeAppleScriptString(cwd)}"`;
+    const safeCommand = escapeAppleScriptString(command || '');
+    const fullCommand = safeCommand ? `${cdCommand} && ${safeCommand}` : cdCommand;
+
+    if (appName === 'iTerm' || appName === 'iTerm2') {
       return `
         tell application "iTerm"
           create window with default profile
@@ -279,14 +312,23 @@ export class TerminalService {
    * Sync current terminal session to native app
    * This sends the current working directory + last command
    */
-  async syncToNativeTerminal(terminalId: string): Promise<void> {
+  async syncToNativeTerminal(terminalId: string, preferredApp?: string): Promise<void> {
     const terminal = this.terminals.get(terminalId);
     if (!terminal) return;
 
-    // Get current working directory from terminal
-    const cwd = process.cwd();
+    // Get current working directory from PTY pid (best-effort).
+    let cwd = process.env.HOME || (app.isReady() ? app.getPath('home') : process.cwd());
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const pidCwd = require('pid-cwd');
+      const next = await pidCwd(terminal.pid);
+      if (typeof next === 'string' && next.trim()) cwd = next.trim();
+    } catch {
+      // ignore
+    }
 
-    await this.openNativeTerminal({ cwd });
+    const lastCommand = this.lastCommands.get(terminalId);
+    await this.openNativeTerminal({ cwd, command: lastCommand, preferredApp });
   }
 
   /**

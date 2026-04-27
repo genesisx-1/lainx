@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useBrowserStore } from '../../store/browser.store';
 import { useBookmarksStore } from '../../store/bookmarks.store';
+import { useUIStore } from '../../store/ui.store';
 
 interface ContextMenuProps {
   x: number;
@@ -30,6 +31,7 @@ export function WebViewContextMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const { webviewApi } = useBrowserStore();
   const { isBookmarked, toggleBookmark } = useBookmarksStore();
+  const { setTerminalOpen, queueTerminalCommand } = useUIStore();
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -58,6 +60,32 @@ export function WebViewContextMenu({
   const searchGoogle = (text: string) => {
     const url = `https://www.google.com/search?q=${encodeURIComponent(text)}`;
     onOpenInNewTab(url);
+    onClose();
+  };
+
+  const runInTerminal = (text: string) => {
+    const trimmed = (text || '').trim();
+    if (!trimmed) return;
+
+    const looksDangerous =
+      trimmed.includes('\n') ||
+      /\brm\s+-rf\b/i.test(trimmed) ||
+      /\bsudo\b/i.test(trimmed) ||
+      /\bcurl\b.*\|\s*sh\b/i.test(trimmed) ||
+      /\bwget\b.*\|\s*sh\b/i.test(trimmed);
+
+    if (looksDangerous) {
+      const ok = window.confirm(
+        `This looks like it could be dangerous to run automatically:\n\n${trimmed.slice(0, 400)}\n\nRun it in the terminal?`
+      );
+      if (!ok) {
+        onClose();
+        return;
+      }
+    }
+
+    setTerminalOpen(true);
+    queueTerminalCommand(trimmed, { run: true });
     onClose();
   };
 
@@ -130,6 +158,9 @@ export function WebViewContextMenu({
           </MenuItem>
           <MenuItem onClick={() => searchGoogle(selectedText)}>
             Search Google for "{selectedText.slice(0, 20)}{selectedText.length > 20 ? '...' : ''}"
+          </MenuItem>
+          <MenuItem onClick={() => runInTerminal(selectedText)}>
+            Run in Terminal
           </MenuItem>
           <Divider />
         </>

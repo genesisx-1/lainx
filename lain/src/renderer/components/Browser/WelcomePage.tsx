@@ -1,9 +1,23 @@
-import React, { useMemo, useState, FormEvent } from 'react';
+import React, { useEffect, useMemo, useState, FormEvent } from 'react';
 import { useBrowserStore } from '../../store/browser.store';
+import { useUIStore } from '../../store/ui.store';
+import { useAIStore } from '../../store/ai.store';
+import { IPC_CHANNELS } from '../../../shared/ipc-channels';
 
 export function WelcomePage() {
   const [searchQuery, setSearchQuery] = useState('');
-  const { activeTabId, updateTab, addTab } = useBrowserStore();
+  const [capsules, setCapsules] = useState<any[]>([]);
+  const { activeTabId, updateTab, addTab, tabs, replaceTabs } = useBrowserStore();
+  const {
+    setSidebarOpen,
+    setTerminalOpen,
+    setShowBookmarksBar,
+    startFocusMode,
+    stopFocusMode,
+    setShowCommandPalette,
+    setShowOnboarding
+  } = useUIStore();
+  const { messages, addMessage, setLoading, getSystemMessage, saveCurrentConversation, settings } = useAIStore();
 
   const modes = useMemo(
     () => [
@@ -15,17 +29,17 @@ export function WelcomePage() {
     []
   );
 
-  const capsules = useMemo(
+  const builtInCapsules = useMemo(
     () => [
       { name: 'Research', icon: 'search' as const },
       { name: 'Dev Session', icon: 'command' as const },
-      { name: 'Invoices', icon: 'receipt' as const },
       { name: 'Custom +', icon: 'plus' as const }
     ],
     []
   );
 
-  const Glyph = ({ name }: { name: typeof modes[number]['icon'] | typeof capsules[number]['icon'] }) => {
+  type GlyphName = 'compass' | 'target' | 'wrench' | 'settings' | 'search' | 'command' | 'receipt' | 'plus';
+  const Glyph = ({ name }: { name: GlyphName }) => {
     switch (name) {
       case 'compass':
         return (
@@ -82,6 +96,39 @@ export function WelcomePage() {
     }
   };
 
+  const looksLikeUrl = (q: string) => q.includes('.') && !q.includes(' ');
+
+  const normalizeUrl = (q: string) => {
+    const trimmed = q.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+    return `https://${trimmed}`;
+  };
+
+  const isAiCommand = (q: string) => {
+    const lower = q.trim().toLowerCase();
+    return (
+      lower.startsWith('/ai ') ||
+      lower === '/ai' ||
+      lower.startsWith('ai ') ||
+      lower === 'ai' ||
+      lower.startsWith('ask ') ||
+      lower.startsWith('/ask ') ||
+      lower.startsWith('summarize ') ||
+      lower.startsWith('/summarize ')
+    );
+  };
+
+  const stripAiPrefix = (q: string) => {
+    const raw = q.trim();
+    const lower = raw.toLowerCase();
+    const prefixes = ['/ai', 'ai', '/ask', 'ask', '/summarize', 'summarize'];
+    for (const p of prefixes) {
+      if (lower === p) return '';
+      if (lower.startsWith(p + ' ')) return raw.slice(p.length + 1);
+    }
+    return raw;
+  };
+
   const navigateInApp = (url: string, mode: 'current' | 'new' = 'current') => {
     const clean = url.trim();
     if (!clean) return;
@@ -99,21 +146,177 @@ export function WelcomePage() {
     addTab(clean);
   };
 
-  const handleSearch = (e: FormEvent) => {
+  const runQuickAI = async (prompt: string) => {
+    const text = (prompt || '').trim();
+    if (!text) return;
+
+    setSidebarOpen(true);
+
+    const installed = await window.electron.ipcRenderer.invoke(IPC_CHANNELS.OLLAMA_CHECK_INSTALLATION);
+    const models: string[] = await window.electron.ipcRenderer.invoke(IPC_CHANNELS.OLLAMA_LIST_MODELS);
+    const modelList = Array.isArray(models) ? models : [];
+
+    if (!installed || modelList.length === 0) {
+      addMessage({
+        role: 'assistant',
+        content: 'Local AI is not set up yet. Opening the setup wizard now.'
+      });
+      setShowOnboarding(true);
+      return;
+    }
+
+    const preferred = (settings.preferredModel || '').trim();
+    const chosen =
+      (preferred && modelList.includes(preferred) && preferred) ||
+      modelList.find((m) => m.startsWith('qwen2.5') && m.includes('0.5b')) ||
+      modelList[0];
+
+    const userMessage = { role: 'user' as const, content: text };
+    addMessage(userMessage);
+    setLoading(true);
+
+    try {
+      const systemPrompt = getSystemMessage();
+      const messagesWithSystem = [
+        ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
+        ...messages,
+        userMessage
+      ];
+
+      const response = await window.electron.ipcRenderer.invoke(IPC_CHANNELS.AI_CHAT, messagesWithSystem, chosen);
+
+      if (response?.message?.content) {
+        addMessage({ role: 'assistant', content: response.message.content });
+        saveCurrentConversation();
+      } else {
+        addMessage({
+          role: 'assistant',
+          content: 'I received an empty response. The model may still be loading.'
+        });
+      }
+    } catch {
+      addMessage({
+        role: 'assistant',
+        content:
+          'Sorry — I couldn’t reach Ollama. If you just installed it, try starting the AI engine or re-run setup.'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const applyMode = (modeName: string) => {
+    const name = modeName.toLowerCase();
+    if (name === 'focus') {
+      if (activeTabId) {
+        startFocusMode({ lockedTabId: activeTabId, durationMinutes: 25 });
+      }
+      setTerminalOpen(false);
+      setSidebarOpen(false);
+      setShowBookmarksBar(false);
+      return;
+    }
+    if (name === 'build') {
+      stopFocusMode();
+      setTerminalOpen(true);
+      setSidebarOpen(true);
+      setShowBookmarksBar(true);
+      return;
+    }
+    if (name === 'automate') {
+      stopFocusMode();
+      setTerminalOpen(true);
+      setSidebarOpen(true);
+      setShowBookmarksBar(false);
+      return;
+    }
+    // Browse (default)
+    stopFocusMode();
+    setTerminalOpen(true);
+    setSidebarOpen(true);
+    setShowBookmarksBar(true);
+  };
+
+  const loadCapsules = async () => {
+    try {
+      const list = await window.electron.ipcRenderer.invoke(IPC_CHANNELS.STORAGE_GET_CAPSULES);
+      setCapsules(Array.isArray(list) ? list : []);
+    } catch {
+      setCapsules([]);
+    }
+  };
+
+  useEffect(() => {
+    loadCapsules();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const saveCapsule = async () => {
+    const name = window.prompt('Capsule name?');
+    if (!name) return;
+
+    const ui = useUIStore.getState();
+    const payload = {
+      id: `cap-${Date.now()}`,
+      name: name.trim(),
+      workspace: {
+        tabs: tabs.map((t) => ({
+          ...t,
+          isLoading: false
+        })),
+        activeTabId,
+        ui: {
+          sidebarOpen: ui.sidebarOpen,
+          terminalOpen: ui.terminalOpen,
+          terminalHeight: ui.terminalHeight,
+          showBookmarksBar: ui.showBookmarksBar,
+          focusMode: ui.focusMode
+        }
+      }
+    };
+
+    await window.electron.ipcRenderer.invoke(IPC_CHANNELS.STORAGE_CREATE_CAPSULE, payload);
+    await loadCapsules();
+  };
+
+  const restoreCapsule = (cap: any) => {
+    const ws = cap?.workspace;
+    if (!ws) return;
+
+    if (ws.ui) {
+      if (typeof ws.ui.sidebarOpen === 'boolean') setSidebarOpen(ws.ui.sidebarOpen);
+      if (typeof ws.ui.terminalOpen === 'boolean') setTerminalOpen(ws.ui.terminalOpen);
+      if (typeof ws.ui.showBookmarksBar === 'boolean') setShowBookmarksBar(ws.ui.showBookmarksBar);
+      if (typeof ws.ui.focusMode === 'boolean') {
+        if (ws.ui.focusMode && activeTabId) startFocusMode({ lockedTabId: activeTabId });
+        if (!ws.ui.focusMode) stopFocusMode();
+      }
+    }
+    if (Array.isArray(ws.tabs)) {
+      replaceTabs(ws.tabs, ws.activeTabId || null);
+    }
+  };
+
+  const handleSearch = async (e: FormEvent) => {
     e.preventDefault();
     const q = searchQuery.trim();
     if (!q) return;
 
-    // If it looks like a URL, treat it like navigation. Otherwise Google search.
-    let url = q;
-    const looksLikeUrl = q.includes('.') && !q.includes(' ');
-    if (looksLikeUrl && !q.startsWith('http://') && !q.startsWith('https://')) {
-      url = `https://${q}`;
-    } else if (!looksLikeUrl && !q.startsWith('http://') && !q.startsWith('https://')) {
-      url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+    // AI command: route to chat sidebar + execute.
+    if (isAiCommand(q)) {
+      setSearchQuery('');
+      await runQuickAI(stripAiPrefix(q));
+      return;
     }
 
-    navigateInApp(url, 'current');
+    // URL vs search.
+    if (q.startsWith('http://') || q.startsWith('https://') || looksLikeUrl(q)) {
+      const url = q.startsWith('http') ? q : normalizeUrl(q);
+      navigateInApp(url, 'current');
+      return;
+    }
+
+    navigateInApp(`https://www.google.com/search?q=${encodeURIComponent(q)}`, 'current');
   };
 
   return (
@@ -161,6 +364,7 @@ export function WelcomePage() {
             <button
               key={m.name}
               type="button"
+              onClick={() => applyMode(m.name)}
               className="lain-glass rounded-xl px-5 h-11 flex items-center gap-3 text-text-secondary hover:text-text-primary hover:bg-bg-secondary/40 transition-colors"
               title={m.name}
             >
@@ -178,8 +382,38 @@ export function WelcomePage() {
           <div className="flex flex-wrap gap-3">
             {capsules.map((c) => (
               <button
+                key={c.id || c.name}
+                type="button"
+                onClick={() => restoreCapsule(c)}
+                className="lain-glass rounded-xl px-5 h-11 flex items-center gap-3 text-sm transition-colors text-text-secondary hover:text-text-primary hover:bg-bg-secondary/40"
+                title={c.name || 'Capsule'}
+              >
+                <span className="text-text-muted"><Glyph name={'command'} /></span>
+                <span className="font-medium">{c.name || 'Capsule'}</span>
+              </button>
+            ))}
+
+            {builtInCapsules.map((c) => (
+              <button
                 key={c.name}
                 type="button"
+                onClick={() => {
+                  if (c.name === 'Custom +') {
+                    saveCapsule().catch(() => {
+                      // ignore
+                    });
+                    return;
+                  }
+                  if (c.name === 'Research') {
+                    applyMode('Browse');
+                    navigateInApp('https://www.google.com', 'current');
+                    return;
+                  }
+                  if (c.name === 'Dev Session') {
+                    applyMode('Build');
+                    navigateInApp('https://github.com', 'current');
+                  }
+                }}
                 className={`lain-glass rounded-xl px-5 h-11 flex items-center gap-3 text-sm transition-colors ${
                   c.name === 'Custom +'
                     ? 'text-text-primary hover:bg-bg-secondary/40 border border-border/40'
@@ -202,7 +436,13 @@ export function WelcomePage() {
         </div>
 
         <div className="mt-8 text-xs text-text-muted/80 flex items-center gap-3">
-          <button type="button" className="hover:text-text-primary transition-colors">Settings</button>
+          <button
+            type="button"
+            onClick={() => setShowCommandPalette(true)}
+            className="hover:text-text-primary transition-colors"
+          >
+            Command Palette
+          </button>
           <span>•</span>
           <button type="button" className="hover:text-text-primary transition-colors">Theme</button>
           <span>•</span>

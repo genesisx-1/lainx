@@ -38,6 +38,30 @@ export class StorageService {
     return this.store.get('capsules').sort((a, b) => b.last_used - a.last_used);
   }
 
+  updateCapsule(id: string, updates: any) {
+    const capsules = this.store.get('capsules');
+    const idx = capsules.findIndex((c: any) => c.id === id);
+    if (idx === -1) throw new Error('Capsule not found');
+    capsules[idx] = { ...capsules[idx], ...updates, last_used: Date.now() };
+    this.store.set('capsules', capsules);
+  }
+
+  deleteCapsule(id: string) {
+    const capsules = this.store.get('capsules');
+    this.store.set(
+      'capsules',
+      capsules.filter((c: any) => c.id !== id)
+    );
+  }
+
+  touchCapsuleLastUsed(id: string) {
+    const capsules = this.store.get('capsules');
+    const idx = capsules.findIndex((c: any) => c.id === id);
+    if (idx === -1) return;
+    capsules[idx] = { ...capsules[idx], last_used: Date.now() };
+    this.store.set('capsules', capsules);
+  }
+
   // History operations
   addToHistory(url: string, title: string) {
     const history = this.store.get('history');

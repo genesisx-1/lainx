@@ -94,7 +94,9 @@ export function OllamaSetup() {
     []
   );
 
-  const [selectedModels, setSelectedModels] = useState<string[]>(['llama3.2']);
+  const [selectedModels, setSelectedModels] = useState<string[]>(['llama3.2', 'codellama']);
+  const [autoInstallTriggered, setAutoInstallTriggered] = useState(false);
+  const [autoModelsTriggered, setAutoModelsTriggered] = useState(false);
 
   const updateStep = (id: SetupStep['id'], status: SetupStep['status']) => {
     setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, status } : s)));
@@ -140,12 +142,30 @@ export function OllamaSetup() {
         if (models.length > 0) {
           updateStep('models', 'complete');
           updateStep('ready', 'complete');
+          return;
         } else {
           updateStep('models', 'in-progress');
+          // Auto-download recommended models if none exist.
+          if (!autoModelsTriggered) {
+            setAutoModelsTriggered(true);
+            addDebugLog('No models found; auto-downloading recommended models...');
+            // Fire and forget; errors will be surfaced via state updates
+            downloadSelectedModels().catch(() => {
+              // handled by downloadSelectedModels
+            });
+          }
         }
       } else {
         setIsInstalled(false);
         updateStep('install', 'in-progress');
+        // Auto-install on first launch when Ollama isn't detected.
+        if (!autoInstallTriggered) {
+          setAutoInstallTriggered(true);
+          addDebugLog('Ollama not detected; starting automatic install...');
+          installOllama().catch(() => {
+            // handled by installOllama
+          });
+        }
       }
     } catch (e: any) {
       setError(e?.message || 'Unable to check Ollama installation.');
@@ -205,6 +225,15 @@ export function OllamaSetup() {
       setIsInstalled(true);
       updateStep('install', 'complete');
       updateStep('models', 'in-progress');
+
+      // If we already know we want models, auto-start downloads after install.
+      if (!autoModelsTriggered) {
+        setAutoModelsTriggered(true);
+        addDebugLog('Auto-downloading selected models...');
+        downloadSelectedModels().catch(() => {
+          // handled by downloadSelectedModels
+        });
+      }
     } catch (e: any) {
       setError(e?.message || 'Ollama installation failed.');
       updateStep('install', 'error');

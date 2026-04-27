@@ -10,6 +10,9 @@ export const IPC_CHANNELS = {
   TERMINAL_OPEN_NATIVE: 'terminal:open-native',
   TERMINAL_SYNC_NATIVE: 'terminal:sync-to-native',
   TERMINAL_GET_AVAILABLE: 'terminal:get-available',
+  TERMINAL_SET_LAST_COMMAND: 'terminal:set-last-command',
+  TERMINAL_GET_CWD: 'terminal:get-cwd',
+  TERMINAL_GET_LAST_COMMAND: 'terminal:get-last-command',
 
   // Ollama
   OLLAMA_CHECK_INSTALLATION: 'ollama:check-installation',
@@ -32,6 +35,10 @@ export const IPC_CHANNELS = {
   STORAGE_SEARCH_COMMANDS: 'storage:search-commands',
   STORAGE_CREATE_CAPSULE: 'storage:create-capsule',
   STORAGE_GET_CAPSULES: 'storage:get-capsules',
+  STORAGE_UPDATE_CAPSULE: 'storage:update-capsule',
+  STORAGE_DELETE_CAPSULE: 'storage:delete-capsule',
+  STORAGE_EXPORT_CAPSULE: 'storage:export-capsule',
+  STORAGE_IMPORT_CAPSULE: 'storage:import-capsule',
   STORAGE_ADD_BOOKMARK: 'storage:add-bookmark',
   STORAGE_GET_BOOKMARKS: 'storage:get-bookmarks',
 
@@ -55,4 +62,12 @@ export const IPC_CHANNELS = {
   SHOW_ONBOARDING: 'show-onboarding',
   ONBOARDING_COMPLETE: 'onboarding:complete',
   ONBOARDING_SKIP: 'onboarding:skip',
+
+  // Agent Orchestration
+  AGENT_CHECK_STATUS: 'agent:check-status',
+  AGENT_RUN_COMMAND: 'agent:run-command',
+  AGENT_GET_TASKS: 'agent:get-tasks',
+  AGENT_CREATE_TASK: 'agent:create-task',
+  AGENT_UPDATE_TASK: 'agent:update-task',
+  AGENT_COMMAND_OUTPUT: 'agent:command-output',
 } as const;

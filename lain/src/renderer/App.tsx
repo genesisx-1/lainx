@@ -7,8 +7,12 @@ import { HistoryPanel } from './components/Browser/HistoryPanel';
 import { SettingsPanel } from './components/Browser/SettingsPanel';
 import { DownloadsPanel } from './components/Browser/DownloadsPanel';
 import { TerminalPanel } from './components/Terminal/TerminalPanel';
-import { ChatPanel } from './components/Assistant/ChatPanel';
+import { AgentHub } from './components/Agents/AgentHub';
 import { OllamaSetup } from './components/Onboarding/OllamaSetup';
+import { CommandPalette } from './components/CommandPalette';
+import { FocusTimer } from './components/Focus/FocusTimer';
+import { FocusBlockOverlay } from './components/Focus/FocusBlockOverlay';
+import { CapsuleManager } from './components/Capsules/CapsuleManager';
 import { useUIStore } from './store/ui.store';
 import { useBrowserStore } from './store/browser.store';
 import { useDownloadsStore } from './store/downloads.store';
@@ -31,10 +35,16 @@ export function App() {
     setShowSettings,
     showFindInPage,
     setShowFindInPage,
-    showBookmarksBar
+    showBookmarksBar,
+    showCommandPalette,
+    setShowCommandPalette,
+    focusMode,
+    focusLockedTabId,
+    showCapsuleManager,
+    setShowCapsuleManager
   } = useUIStore();
   
-  const { addTab, closeTab, activeTabId } = useBrowserStore();
+  const { addTab, closeTab, activeTabId, tabs, updateTab } = useBrowserStore();
   const { addDownload, updateDownload } = useDownloadsStore();
   const { addEntry } = useHistoryStore();
   const webviewRef = useRef<Electron.WebviewTag>(null);
@@ -121,12 +131,13 @@ export function App() {
     // Cmd+T opens new tab
     if (mod && e.key.toLowerCase() === 't') {
       e.preventDefault();
-      addTab();
+      if (!focusMode) addTab();
     }
 
     // Cmd+W closes current tab
     if (mod && e.key.toLowerCase() === 'w') {
       e.preventDefault();
+      if (focusMode) return;
       if (activeTabId) {
         closeTab(activeTabId);
       }
@@ -138,17 +149,50 @@ export function App() {
       setShowFindInPage(true);
     }
 
+    // Cmd+K command palette
+    if (mod && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      setShowCommandPalette(true);
+    }
+
     // Cmd+Y opens history
     if (mod && e.key.toLowerCase() === 'y') {
       e.preventDefault();
       setShowHistory(true);
     }
 
+    // Zoom controls: Cmd+Plus / Cmd+Minus / Cmd+0
+    if (mod && !e.shiftKey && (e.key === '=' || e.key === '+')) {
+      e.preventDefault();
+      if (!activeTabId) return;
+      const tab = tabs.find((t) => t.id === activeTabId);
+      const current = tab?.zoomFactor ?? 1;
+      const next = Math.min(3, Math.round((current + 0.1) * 10) / 10);
+      updateTab(activeTabId, { zoomFactor: next });
+      return;
+    }
+    if (mod && (e.key === '-' || e.key === '_')) {
+      e.preventDefault();
+      if (!activeTabId) return;
+      const tab = tabs.find((t) => t.id === activeTabId);
+      const current = tab?.zoomFactor ?? 1;
+      const next = Math.max(0.25, Math.round((current - 0.1) * 10) / 10);
+      updateTab(activeTabId, { zoomFactor: next });
+      return;
+    }
+    if (mod && e.key === '0') {
+      e.preventDefault();
+      if (!activeTabId) return;
+      updateTab(activeTabId, { zoomFactor: 1 });
+      return;
+    }
+
     // Escape closes modals
     if (e.key === 'Escape') {
       if (showFindInPage) setShowFindInPage(false);
+      if (showCommandPalette) setShowCommandPalette(false);
     }
-  }, [toggleSidebar, toggleTerminal, addTab, closeTab, activeTabId, setShowFindInPage, setShowHistory, showFindInPage]);
+  }, [toggleSidebar, toggleTerminal, addTab, closeTab, activeTabId, setShowFindInPage, setShowHistory, showFindInPage, showCommandPalette, setShowCommandPalette, focusMode, tabs, updateTab]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
@@ -215,10 +259,10 @@ export function App() {
           )}
         </div>
 
-        {/* AI sidebar on right */}
+        {/* Agent Hub sidebar on right */}
         {sidebarOpen && (
           <div className="w-[400px] border-l border-border flex-shrink-0">
-            <ChatPanel />
+            <AgentHub />
           </div>
         )}
       </div>
@@ -229,6 +273,15 @@ export function App() {
       
       {/* Downloads panel (floating) */}
       <DownloadsPanel />
+
+      {/* Command palette */}
+      <CommandPalette />
+
+      {/* Focus mode UI */}
+      <FocusTimer />
+      <FocusBlockOverlay />
+
+      {showCapsuleManager && <CapsuleManager onClose={() => setShowCapsuleManager(false)} />}
     </div>
   );
 }

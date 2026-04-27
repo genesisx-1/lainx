@@ -72,6 +72,16 @@ export function AddressBar({ onHistoryClick, onSettingsClick }: AddressBarProps)
     }
   }, [activeTab?.isLoading, webviewApi]);
 
+  const zoomFactor = activeTab?.zoomFactor ?? 1;
+  const setZoom = useCallback(
+    (next: number) => {
+      if (!activeTabId) return;
+      const clamped = Math.max(0.25, Math.min(3, Math.round(next * 100) / 100));
+      updateTab(activeTabId, { zoomFactor: clamped });
+    },
+    [activeTabId, updateTab]
+  );
+
   const handleToggleBookmark = useCallback(() => {
     if (!activeTab || !canBookmark) return;
     const wasBookmarked = isBookmarked(activeTab.url);
@@ -335,6 +345,36 @@ export function AddressBar({ onHistoryClick, onSettingsClick }: AddressBarProps)
 
       {/* Actions */}
       <div className="flex gap-1">
+        {/* Zoom controls */}
+        {activeTab && activeTab.url !== 'lain://welcome' && (
+          <div className="flex items-center gap-1 mr-1">
+            <button
+              type="button"
+              onClick={() => setZoom((zoomFactor || 1) - 0.1)}
+              className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-bg-secondary/40 text-text-muted transition-colors"
+              title="Zoom out (Cmd+-)"
+            >
+              −
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoom(1)}
+              className="px-2 h-9 rounded-xl hover:bg-bg-secondary/40 text-text-secondary transition-colors text-xs border border-transparent hover:border-border/40"
+              title="Reset zoom (Cmd+0)"
+            >
+              {Math.round((zoomFactor || 1) * 100)}%
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoom((zoomFactor || 1) + 0.1)}
+              className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-bg-secondary/40 text-text-muted transition-colors"
+              title="Zoom in (Cmd++)"
+            >
+              +
+            </button>
+          </div>
+        )}
+
         {/* History button */}
         <button
           type="button"

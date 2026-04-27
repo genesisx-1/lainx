@@ -6,7 +6,43 @@ interface SettingsPanelProps {
 }
 
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
-  const { sidebarOpen, terminalOpen, toggleSidebar, toggleTerminal } = useUIStore();
+  const {
+    sidebarOpen,
+    terminalOpen,
+    toggleSidebar,
+    toggleTerminal,
+    showBookmarksBar,
+    setShowBookmarksBar,
+    focusBlocklist,
+    setFocusBlocklist,
+    breakGlass,
+    focusTimer
+  } = useUIStore();
+  const { setShowCapsuleManager } = useUIStore();
+
+  const [blocklistText, setBlocklistText] = React.useState((focusBlocklist || []).join('\n'));
+  const [focusDurationMin, setFocusDurationMin] = React.useState(() =>
+    focusTimer?.durationSec ? Math.round(focusTimer.durationSec / 60) : 25
+  );
+  const [breakMinutes, setBreakMinutes] = React.useState(breakGlass.allowMinutes);
+  const [cooldownMinutes, setCooldownMinutes] = React.useState(breakGlass.cooldownMinutes);
+
+  // Persist settings back into store (best-effort; keep UX simple).
+  React.useEffect(() => {
+    // store currently owns these values; we keep inputs as draft and write on blur/save later
+    // (blocklist has explicit Save button)
+    useUIStore.setState((s) => ({
+      breakGlass: {
+        ...s.breakGlass,
+        allowMinutes: Math.max(1, breakMinutes),
+        cooldownMinutes: Math.max(1, cooldownMinutes)
+      },
+      focusTimer: {
+        ...s.focusTimer,
+        durationSec: Math.max(60, Math.round(Math.max(1, focusDurationMin) * 60))
+      }
+    }));
+  }, [breakMinutes, cooldownMinutes, focusDurationMin]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -60,6 +96,85 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                   />
                 </button>
               </label>
+              <label className="flex items-center justify-between">
+                <span className="text-sm text-text-secondary">Show Bookmarks Bar</span>
+                <button
+                  onClick={() => setShowBookmarksBar(!showBookmarksBar)}
+                  className={`w-10 h-5 rounded-full transition-colors ${
+                    showBookmarksBar ? 'bg-accent' : 'bg-bg-secondary'
+                  }`}
+                >
+                  <div
+                    className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                      showBookmarksBar ? 'translate-x-5' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
+              </label>
+            </div>
+          </section>
+
+          {/* Focus Mode */}
+          <section>
+            <h3 className="text-sm font-medium text-text-primary mb-3">Focus Mode</h3>
+            <div className="space-y-3">
+              <div>
+                <div className="text-xs text-text-muted mb-1">Blocklist (one domain per line)</div>
+                <textarea
+                  value={blocklistText}
+                  onChange={(e) => setBlocklistText(e.target.value)}
+                  className="w-full h-28 px-3 py-2 rounded-md bg-bg-secondary border border-border text-text-primary text-sm focus:outline-none focus:border-accent"
+                  placeholder="youtube.com\nreddit.com\n..."
+                />
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFocusBlocklist(blocklistText.split('\n'))}
+                    className="px-3 h-9 rounded-md bg-bg-panel hover:bg-bg-primary text-text-primary text-sm border border-border"
+                  >
+                    Save Blocklist
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <label className="text-sm text-text-secondary">
+                  <div className="text-xs text-text-muted mb-1">Default timer (min)</div>
+                  <input
+                    type="number"
+                    value={focusDurationMin}
+                    onChange={(e) => setFocusDurationMin(parseInt(e.target.value || '25', 10))}
+                    className="w-full h-9 px-3 rounded-md bg-bg-secondary border border-border text-text-primary text-sm"
+                    min={1}
+                    max={240}
+                  />
+                </label>
+                <label className="text-sm text-text-secondary">
+                  <div className="text-xs text-text-muted mb-1">Break Glass (min)</div>
+                  <input
+                    type="number"
+                    value={breakMinutes}
+                    onChange={(e) => setBreakMinutes(parseInt(e.target.value || '5', 10))}
+                    className="w-full h-9 px-3 rounded-md bg-bg-secondary border border-border text-text-primary text-sm"
+                    min={1}
+                    max={60}
+                  />
+                </label>
+                <label className="text-sm text-text-secondary">
+                  <div className="text-xs text-text-muted mb-1">Cooldown (min)</div>
+                  <input
+                    type="number"
+                    value={cooldownMinutes}
+                    onChange={(e) => setCooldownMinutes(parseInt(e.target.value || '10', 10))}
+                    className="w-full h-9 px-3 rounded-md bg-bg-secondary border border-border text-text-primary text-sm"
+                    min={1}
+                    max={240}
+                  />
+                </label>
+              </div>
+              <div className="text-xs text-text-muted">
+                Note: timer/break-glass settings apply to new Focus sessions.
+              </div>
             </div>
           </section>
 
@@ -100,6 +215,21 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
             <div className="text-sm text-text-muted">
               <p>LAIN Browser v0.1.0</p>
               <p className="mt-1">Desktop browser with integrated terminal and local AI</p>
+            </div>
+          </section>
+
+          {/* Capsules */}
+          <section>
+            <h3 className="text-sm font-medium text-text-primary mb-3">Capsules</h3>
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-text-secondary">Save and restore workspace layouts</div>
+              <button
+                type="button"
+                onClick={() => setShowCapsuleManager(true)}
+                className="px-3 h-9 rounded-md bg-bg-panel hover:bg-bg-primary text-text-primary text-sm border border-border"
+              >
+                Manage Capsules…
+              </button>
             </div>
           </section>
         </div>

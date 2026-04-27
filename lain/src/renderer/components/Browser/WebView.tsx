@@ -1,9 +1,27 @@
 import React, { useEffect, useRef, useCallback, useMemo, useState, forwardRef, useImperativeHandle } from 'react';
 import { useBrowserStore } from '../../store/browser.store';
+import { useUIStore } from '../../store/ui.store';
 import { WelcomePage } from './WelcomePage';
 import { FindInPage } from './FindInPage';
 import { WebViewContextMenu } from './WebViewContextMenu';
 import { IPC_CHANNELS } from '../../../shared/ipc-channels';
+
+function getHost(url: string): string {
+  try {
+    const u = new URL(url);
+    return (u.hostname || '').toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function matchBlockRule(host: string, rule: string): boolean {
+  const r = (rule || '').trim().toLowerCase();
+  if (!r || !host) return false;
+  if (host === r) return true;
+  if (host.endsWith('.' + r)) return true;
+  return host.includes(r);
+}
 
 interface WebViewProps {
   showFindInPage?: boolean;
@@ -89,6 +107,18 @@ export const WebView = forwardRef<Electron.WebviewTag | null, WebViewProps>(func
 
     const webview = el;
 
+    const shouldBlockUrl = (url: string) => {
+      const ui = useUIStore.getState();
+      if (!ui.focusMode) return { blocked: false };
+      const now = Date.now();
+      if (ui.breakGlass.until && ui.breakGlass.until > now) return { blocked: false };
+      const host = getHost(url);
+      for (const rule of ui.focusBlocklist || []) {
+        if (matchBlockRule(host, rule)) return { blocked: true, rule };
+      }
+      return { blocked: false };
+    };
+
     const onDidStartLoading = () => {
       updateTab(tabId, { isLoading: true });
       updateNavStateFor(tabId, webview);
@@ -133,9 +163,58 @@ export const WebView = forwardRef<Electron.WebviewTag | null, WebViewProps>(func
       updateNavStateFor(tabId, webview);
     };
 
+    // Focus mode: block navigation & new window.
+    const onWillNavigate = (e: any) => {
+      const url = e?.url || '';
+      const ui = useUIStore.getState();
+      if (ui.focusMode && ui.focusLockedTabId && ui.focusLockedTabId !== tabId) {
+        try {
+          e.preventDefault?.();
+        } catch {
+          // ignore
+        }
+        useUIStore.getState().showFocusBlocked({ url, rule: 'Focus Mode: locked to one tab' });
+        return;
+      }
+      const res = shouldBlockUrl(url);
+      if (res.blocked) {
+        try {
+          e.preventDefault?.();
+        } catch {
+          // ignore
+        }
+        useUIStore.getState().showFocusBlocked({ url, rule: res.rule || 'blocked' });
+      }
+    };
+
+    const onNewWindow = (e: any) => {
+      const url = e?.url || e?.params?.url || '';
+      const ui = useUIStore.getState();
+      if (!ui.focusMode) return;
+      // Always prevent new-window while focusing (single tab lock).
+      try {
+        e.preventDefault?.();
+      } catch {
+        // ignore
+      }
+      const res = shouldBlockUrl(url);
+      useUIStore.getState().showFocusBlocked({
+        url: url || '(new window)',
+        rule: res.blocked ? (res.rule || 'blocked') : 'Focus Mode: new windows disabled'
+      });
+    };
+
     const onPageFaviconUpdated = (e: any) => {
       const fav = Array.isArray(e?.favicons) ? e.favicons[0] : undefined;
       if (fav) updateTab(tabId, { favicon: fav });
+    };
+
+    // Tab audio indicator
+    const onMediaStartedPlaying = () => {
+      updateTab(tabId, { isAudioPlaying: true });
+    };
+    const onMediaPaused = () => {
+      updateTab(tabId, { isAudioPlaying: false });
     };
 
     // Context menu handler
@@ -156,6 +235,10 @@ export const WebView = forwardRef<Electron.WebviewTag | null, WebViewProps>(func
     webview.addEventListener('did-navigate-in-page', onDidNavigateInPage);
     webview.addEventListener('page-favicon-updated', onPageFaviconUpdated);
     webview.addEventListener('context-menu', onContextMenu);
+    webview.addEventListener('will-navigate', onWillNavigate);
+    webview.addEventListener('new-window', onNewWindow);
+    webview.addEventListener('media-started-playing', onMediaStartedPlaying);
+    webview.addEventListener('media-paused', onMediaPaused);
 
     // Initial state
     updateNavStateFor(tabId, webview);
@@ -168,6 +251,10 @@ export const WebView = forwardRef<Electron.WebviewTag | null, WebViewProps>(func
       webview.removeEventListener('did-navigate-in-page', onDidNavigateInPage);
       webview.removeEventListener('page-favicon-updated', onPageFaviconUpdated);
       webview.removeEventListener('context-menu', onContextMenu);
+      webview.removeEventListener('will-navigate', onWillNavigate);
+      webview.removeEventListener('new-window', onNewWindow);
+      webview.removeEventListener('media-started-playing', onMediaStartedPlaying);
+      webview.removeEventListener('media-paused', onMediaPaused);
     };
   }, [updateTab, updateNavStateFor, onNavigate]);
 
@@ -391,6 +478,22 @@ export const WebView = forwardRef<Electron.WebviewTag | null, WebViewProps>(func
 
     return () => setWebviewApi(null);
   }, [activeTabId, setWebviewApi, updateNavStateFor]);
+
+  // Apply per-tab zoom factor whenever it changes.
+  useEffect(() => {
+    if (!activeTabId) return;
+    const webview = webviewsByIdRef.current[activeTabId];
+    if (!webview) return;
+    try {
+      const tab = useBrowserStore.getState().tabs.find((t) => t.id === activeTabId);
+      const zoom = tab?.zoomFactor ?? 1;
+      if (typeof webview.setZoomFactor === 'function') {
+        webview.setZoomFactor(zoom);
+      }
+    } catch {
+      // ignore
+    }
+  }, [activeTabId, activeTab?.zoomFactor]);
 
   // Memoize tab URLs to prevent unnecessary updates
   const tabsToRender = useMemo(() => {

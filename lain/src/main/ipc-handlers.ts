@@ -1,12 +1,15 @@
-import { ipcMain, IpcMainInvokeEvent } from 'electron';
+import { ipcMain, dialog } from 'electron';
+import * as fs from 'fs';
 import { TerminalService } from './services/terminal.service';
 import { AIService } from './services/ai.service';
 import { OllamaManagerService } from './services/ollama-manager.service';
 import { StorageService } from './services/storage.service';
 import { HistoryService } from './services/history.service';
+import { AgentService } from './services/agent.service';
 import { IPC_CHANNELS } from '../shared/ipc-channels';
 
 const historyService = new HistoryService();
+const agentService = new AgentService();
 
 export function registerIPCHandlers(
   terminalService: TerminalService,
@@ -50,9 +53,28 @@ export function registerIPCHandlers(
     return { success: true };
   });
 
-  ipcMain.handle(IPC_CHANNELS.TERMINAL_SYNC_NATIVE, async (event, terminalId: string) => {
-    await terminalService.syncToNativeTerminal(terminalId);
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_SYNC_NATIVE, async (_event, options: {
+    terminalId: string;
+    preferredApp?: string;
+  }) => {
+    await terminalService.syncToNativeTerminal(options.terminalId, options.preferredApp);
     return { success: true };
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.TERMINAL_SET_LAST_COMMAND,
+    async (_event, terminalId: string, command: string) => {
+      terminalService.setLastCommand(terminalId, command);
+      return { success: true };
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_GET_CWD, async (_event, terminalId: string) => {
+    return await terminalService.getTerminalCwd(terminalId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_GET_LAST_COMMAND, async (_event, terminalId: string) => {
+    return terminalService.getLastCommand(terminalId);
   });
 
   ipcMain.handle(IPC_CHANNELS.TERMINAL_GET_AVAILABLE, async () => {
@@ -165,6 +187,49 @@ export function registerIPCHandlers(
     return storageService.getCapsules();
   });
 
+  ipcMain.handle(IPC_CHANNELS.STORAGE_UPDATE_CAPSULE, async (_event, id: string, updates: any) => {
+    storageService.updateCapsule(id, updates);
+    return { success: true };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.STORAGE_DELETE_CAPSULE, async (_event, id: string) => {
+    storageService.deleteCapsule(id);
+    return { success: true };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.STORAGE_EXPORT_CAPSULE, async (_event, id: string) => {
+    const capsules = storageService.getCapsules();
+    const capsule = capsules.find((c: any) => c.id === id);
+    if (!capsule) throw new Error('Capsule not found');
+
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: 'Export Capsule',
+      defaultPath: `${capsule.name || 'capsule'}.lain-capsule.json`,
+      filters: [{ name: 'LAIN Capsule', extensions: ['json'] }]
+    });
+    if (canceled || !filePath) return { success: false, canceled: true };
+
+    fs.writeFileSync(filePath, JSON.stringify(capsule, null, 2), 'utf8');
+    return { success: true, filePath };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.STORAGE_IMPORT_CAPSULE, async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      title: 'Import Capsule',
+      properties: ['openFile'],
+      filters: [{ name: 'LAIN Capsule', extensions: ['json'] }]
+    });
+    if (canceled || !filePaths?.[0]) return { success: false, canceled: true };
+
+    const raw = fs.readFileSync(filePaths[0], 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') throw new Error('Invalid capsule file');
+    if (!parsed.id) parsed.id = `cap-${Date.now()}`;
+    if (!parsed.name) parsed.name = 'Imported Capsule';
+    storageService.createCapsule(parsed);
+    return { success: true, capsule: parsed };
+  });
+
   ipcMain.handle(IPC_CHANNELS.STORAGE_ADD_BOOKMARK, async (
     event,
     id: string,
@@ -206,5 +271,28 @@ export function registerIPCHandlers(
 
   ipcMain.handle(IPC_CHANNELS.BROWSER_CAN_GO_FORWARD, async (_event, tabId: string) => {
     return historyService.canGoForward(tabId);
+  });
+
+  // Agent Orchestration handlers
+  ipcMain.handle(IPC_CHANNELS.AGENT_CHECK_STATUS, async () => {
+    return await agentService.checkAllStatuses();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.AGENT_RUN_COMMAND, async (event, agentId: string, prompt: string) => {
+    return await agentService.runAgentCommand(agentId as any, prompt, (data) => {
+      event.sender.send(IPC_CHANNELS.AGENT_COMMAND_OUTPUT, { agentId, data });
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.AGENT_GET_TASKS, async () => {
+    return await agentService.getTasks();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.AGENT_CREATE_TASK, async (_event, task: any) => {
+    return await agentService.createTask(task);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.AGENT_UPDATE_TASK, async (_event, id: string, updates: any) => {
+    return await agentService.updateTask(id, updates);
   });
 }

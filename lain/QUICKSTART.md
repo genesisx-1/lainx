@@ -1,6 +1,6 @@
 # LAIN Quick Start Guide
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 - Node.js 18+ installed
@@ -20,13 +20,9 @@ npm install
 ./dev.sh
 ```
 
-**Option 2: Manual start**
+**Option 2: One command**
 ```bash
-# Terminal 1 - Start Vite dev server
-npm run dev:vite
-
-# Terminal 2 - Start Electron
-NODE_ENV=development npx electron .
+npm run dev
 ```
 
 ### What You Should See
@@ -36,7 +32,7 @@ NODE_ENV=development npx electron .
 3. **Terminal panel** at the bottom (black background)
 4. **AI Chat sidebar** on the right (purple accent)
 
-## 🧪 Testing the MVP
+## Testing checklist
 
 ### Test 1: Browser Tabs
 - Click the **+** button to add new tabs
@@ -59,11 +55,24 @@ NODE_ENV=development npx electron .
 - If Ollama is not installed, you'll see the onboarding screen
 
 ### Test 5: Native Terminal Integration
-- Look for the "Open in [iTerm2/Warp/etc]" button in terminal toolbar
-- Click it to open your native terminal app
-- Verify it opens in the correct directory
+- Run a simple command in the LAIN terminal (e.g. `pwd`, `ls`)
+- Click **Continue in iTerm2/Warp/etc**
+- Verify it opens in the same folder and runs the last command
 
-## 🐛 Troubleshooting
+### Test 6: Terminal URL clickability
+- In terminal: `echo https://example.com`
+- Click the URL → it should open in a new browser tab
+
+### Test 7: Focus Mode
+- On Welcome page, click **Focus**
+- Try navigating to a blocked site (default includes `youtube.com`, `reddit.com`, `x.com`)
+- Confirm the Focus overlay appears and **Break Glass** works (with cooldown)
+
+### Test 8: Capsules
+- Settings → **Manage Capsules…**
+- Save current workspace, restore it, export it, then import it and restore again
+
+## Troubleshooting
 
 ### App doesn't launch
 ```bash
@@ -172,15 +181,16 @@ npm run dev:vite
 # Opens on http://localhost:5173
 ```
 
-## 🎉 Success Criteria
+## Success Criteria
 
-You'll know the MVP is working when:
+You'll know LAIN is working when:
 - ✅ App launches without errors
 - ✅ You can create and close tabs
 - ✅ Terminal accepts input
 - ✅ Commands execute and show output
-- ✅ AI chat interface is responsive
-- ✅ Layout is clean and functional
+- ✅ AI chat interface is responsive (after Ollama setup)
+- ✅ Focus Mode blocks sites and the timer runs
+- ✅ Capsules save/restore correctly
 
 ## 🆘 Getting Help
 
@@ -193,5 +203,3 @@ If you encounter issues:
 5. **Check that Vite is running** on port 5173
 
 ---
-
-**Ready to build the future of productivity? Let's ship LAIN! 🚀**
