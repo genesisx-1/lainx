@@ -13,6 +13,9 @@ import type {
 import { ProviderManager } from '../services/providers/manager';
 import { ToolRegistry } from './tool-registry';
 import { RendererBrowserDriver } from './renderer-driver';
+import { HeadlessBrowserDriver } from '../browser/headless-driver';
+import { buildComputerTools, buildImessageTools } from './extra-tools';
+import { SecureStoreService } from '../services/secure-store.service';
 import type { BrowserDriver, ToolContext } from './types';
 
 interface StartTaskOpts {
@@ -42,7 +45,8 @@ export class AgentOrchestrator extends EventEmitter {
 
   constructor(
     private readonly providers: ProviderManager,
-    private readonly getWindow: () => BrowserWindow | null
+    private readonly getWindow: () => BrowserWindow | null,
+    private readonly secureStore?: SecureStoreService
   ) {
     super();
     this.userResponseChannel = IPC_CHANNELS.AGENT_RESPOND_USER;
@@ -55,6 +59,11 @@ export class AgentOrchestrator extends EventEmitter {
         aw.resolve(payload.answer);
       }
     });
+    // Register OS-level tools when a SecureStoreService is provided.
+    if (this.secureStore) {
+      for (const t of buildComputerTools(this.secureStore)) this.toolRegistry.register(t);
+      for (const t of buildImessageTools(this.secureStore)) this.toolRegistry.register(t);
+    }
   }
 
   registry() {
@@ -67,10 +76,12 @@ export class AgentOrchestrator extends EventEmitter {
       ? { id: opts.provider, provider: this.providers.get(opts.provider), models: this.providers.modelsFor(opts.provider) }
       : this.providers.getDefault();
 
-    const driver = new RendererBrowserDriver(
-      this.getWindow,
-      () => opts.tabId || this.activeTabId()
-    );
+    const driver: BrowserDriver = opts.mode === 'headless'
+      ? new HeadlessBrowserDriver()
+      : new RendererBrowserDriver(
+          this.getWindow,
+          () => opts.tabId || this.activeTabId()
+        );
 
     const task: InternalTask = {
       id,
@@ -92,10 +103,12 @@ export class AgentOrchestrator extends EventEmitter {
     this.tasks.set(id, task);
 
     // Fire-and-forget; the loop emits events as it runs.
-    this.runTask(task, { withVision: opts.withVision !== false, withPlanner: opts.withPlanner !== false }).catch((err) => {
-      task.status = 'failed';
-      this.emitEvent(task, 'task_failed', { error: err?.message || String(err) });
-    });
+    this.runTask(task, { withVision: opts.withVision !== false, withPlanner: opts.withPlanner !== false })
+      .catch((err) => {
+        task.status = 'failed';
+        this.emitEvent(task, 'task_failed', { error: err?.message || String(err) });
+      })
+      .finally(() => { this.cleanupTask(task); });
 
     return this.publicTask(task);
   }
@@ -331,6 +344,14 @@ export class AgentOrchestrator extends EventEmitter {
 
     task.status = 'failed';
     this.emitEvent(task, 'task_failed', { error: `Exceeded ${MAX_STEPS} steps without completing.` });
+  }
+
+  // Close any per-task resources (e.g. Playwright context) once a task ends.
+  private async cleanupTask(task: InternalTask) {
+    const drv: any = task.driver;
+    if (drv && typeof drv.close === 'function') {
+      try { await drv.close(); } catch { /* ignore */ }
+    }
   }
 
   // Keep the context size in check by trimming older tool_result blocks down

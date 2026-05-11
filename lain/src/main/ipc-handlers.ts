@@ -7,6 +7,7 @@ import { HistoryService } from './services/history.service';
 import { SecureStoreService } from './services/secure-store.service';
 import { ProviderManager } from './services/providers/manager';
 import { AgentOrchestrator } from './agent/orchestrator';
+import { ControlServer } from './control-server/server';
 import { IPC_CHANNELS } from '../shared/ipc-channels';
 import type { AIMessage, ProviderId } from '../shared/types';
 
@@ -19,7 +20,8 @@ export function registerIPCHandlers(
   storageService: StorageService,
   secureStore: SecureStoreService,
   providerManager: ProviderManager,
-  orchestrator: AgentOrchestrator
+  orchestrator: AgentOrchestrator,
+  controlServer: ControlServer
 ) {
   // Terminal handlers
   ipcMain.handle(IPC_CHANNELS.TERMINAL_CREATE, async (event, options: { id: string; cwd?: string }) => {
@@ -297,11 +299,27 @@ export function registerIPCHandlers(
   ipcMain.handle(IPC_CHANNELS.CONTROL_SERVER_REGENERATE_TOKEN, async () => {
     const token = `lain_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
     secureStore.setControlServerConfig({ token });
+    controlServer.restart();
     return { token };
   });
 
   ipcMain.handle(IPC_CHANNELS.CONTROL_SERVER_SET_ENABLED, async (_event, enabled: boolean) => {
     secureStore.setControlServerConfig({ enabled });
+    if (enabled) controlServer.start();
+    else controlServer.stop();
+    return { ok: true };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.AGENT_PERMISSIONS_GET, async () => {
+    return {
+      'computer-use': secureStore.getPermission('computer-use'),
+      'computer-shell': secureStore.getPermission('computer-shell'),
+      imessage: secureStore.getPermission('imessage'),
+    };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.AGENT_PERMISSIONS_SET, async (_event, key: string, value: 'allow' | 'deny' | 'ask') => {
+    secureStore.setPermission(key, value);
     return { ok: true };
   });
 }

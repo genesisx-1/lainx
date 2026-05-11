@@ -9,6 +9,7 @@ import { StorageService } from './services/storage.service';
 import { SecureStoreService } from './services/secure-store.service';
 import { ProviderManager } from './services/providers/manager';
 import { AgentOrchestrator } from './agent/orchestrator';
+import { ControlServer } from './control-server/server';
 import { registerIPCHandlers } from './ipc-handlers';
 import { IPC_CHANNELS } from '../shared/ipc-channels';
 
@@ -23,7 +24,8 @@ const providerManager = new ProviderManager(secureStore);
 const aiService = new AIService(providerManager);
 const ollamaManagerService = new OllamaManagerService();
 const storageService = new StorageService();
-const orchestrator = new AgentOrchestrator(providerManager, () => mainWindow);
+const orchestrator = new AgentOrchestrator(providerManager, () => mainWindow, secureStore);
+const controlServer = new ControlServer(orchestrator, providerManager, secureStore);
 
 function getAppIconPath(): string {
   // In packaged builds, we bundle project `resources/` into `process.resourcesPath/resources`.
@@ -182,7 +184,8 @@ registerIPCHandlers(
   storageService,
   secureStore,
   providerManager,
-  orchestrator
+  orchestrator,
+  controlServer
 );
 
 // App lifecycle
@@ -201,6 +204,7 @@ app.whenReady().then(() => {
 
   setupDownloadHandling();
   createWindow();
+  try { controlServer.start(); } catch (e) { console.error('[lain] control server failed to start:', e); }
 
   // Handle downloads for webview sessions
   app.on('web-contents-created', (_event, contents) => {
@@ -221,10 +225,12 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     storageService.close();
+    try { controlServer.stop(); } catch { /* ignore */ }
     app.quit();
   }
 });
 
 app.on('before-quit', () => {
   storageService.close();
+  try { controlServer.stop(); } catch { /* ignore */ }
 });

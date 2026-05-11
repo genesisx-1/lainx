@@ -4,6 +4,9 @@
   "description": "Desktop Browser Shell with Terminal and Local AI",
   "main": "dist/main/index.js",
   "type": "commonjs",
+  "bin": {
+    "lainx": "./cli/lainx.js"
+  },
   "scripts": {
     "dev": "NODE_ENV=development concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite",

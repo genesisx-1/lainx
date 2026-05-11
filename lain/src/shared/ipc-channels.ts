@@ -85,4 +85,8 @@ export const IPC_CHANNELS = {
   CONTROL_SERVER_GET_INFO: 'control-server:get-info',
   CONTROL_SERVER_REGENERATE_TOKEN: 'control-server:regenerate-token',
   CONTROL_SERVER_SET_ENABLED: 'control-server:set-enabled',
+
+  // Agent/OS permissions
+  AGENT_PERMISSIONS_GET: 'agent:permissions:get',
+  AGENT_PERMISSIONS_SET: 'agent:permissions:set',
 } as const;

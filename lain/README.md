@@ -1,14 +1,30 @@
-# LAIN - Desktop Browser Shell
+# LAIN - Agentic Desktop Browser
 
-A productivity-focused desktop browser with integrated terminal and local AI assistant.
+A Comet-style agentic browser with integrated terminal and a multi-provider AI
+stack. Read [`../AGENT.md`](../AGENT.md) first if you (or your AI assistant)
+need the full architecture.
 
 ## Features
 
-- **Chromium Browser** - Full-featured web browsing with tabs
-- **Integrated Terminal** - Real bash/zsh terminal with xterm.js
-- **Local AI Assistant** - Ollama-powered AI that runs on your machine
-- **Native Terminal Bridge** - Open sessions in iTerm2, Warp, or other terminal apps
-- **Browser ↔ Terminal Integration** - Seamless connection between browsing and command-line work
+- **Agent mode** - Anthropic / OpenAI / OpenRouter / local Ollama drive the
+  browser through a structured tool-calling loop (`browser_observe`,
+  `browser_click`, `browser_type`, `browser_screenshot`, …) with optional
+  vision and an Opus-plans-Sonnet-acts dual-model setup.
+- **Live tab takeover** - Watch the agent click around the real tab, grab
+  the mouse anytime to take over.
+- **Headless background mode** - Playwright-driven Chromium for long-running
+  jobs that shouldn't steal your screen.
+- **Omnibox** - Single bar that morphs between URL, Ask, and Agent modes
+  (⌘L to focus, click the chip to switch).
+- **CLI / HTTP** - `lainx` binary + local control server on `127.0.0.1:7878`
+  so any shell, script, or other AI can drive the browser.
+- **Computer-use** - Optional OS-level mouse/keyboard/screen via nut-js +
+  Electron `desktopCapturer`, behind explicit consent.
+- **iMessage** - macOS-only `send` and `read_recent` tools via AppleScript
+  and `~/Library/Messages/chat.db`.
+- **Chromium browser** - Tabs, bookmarks, history, downloads, find-in-page.
+- **Integrated terminal** - Real bash/zsh terminal with xterm.js + native
+  bridge to iTerm2/Warp/Windows Terminal.
 
 ## Tech Stack
 
