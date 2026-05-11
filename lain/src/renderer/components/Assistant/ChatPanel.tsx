@@ -134,6 +134,23 @@ export function ChatPanel() {
     scrollToBottom();
   }, [messages]);
 
+  // Listen for omnibox "Ask" mode dispatches and pre-fill the input.
+  useEffect(() => {
+    const onAsk = (e: Event) => {
+      const ce = e as CustomEvent<{ question: string }>;
+      const q = ce.detail?.question;
+      if (typeof q === 'string') {
+        setInput((prev) => (prev ? `${prev} ${q}` : q));
+        setTimeout(() => {
+          const el = document.querySelector('[data-lain-chat-input]') as HTMLTextAreaElement | null;
+          el?.focus();
+        }, 0);
+      }
+    };
+    window.addEventListener('lain:omnibox-ask', onAsk as EventListener);
+    return () => window.removeEventListener('lain:omnibox-ask', onAsk as EventListener);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -853,6 +870,7 @@ export function ChatPanel() {
       <div className="p-4 border-t border-border">
         <div className="flex gap-2">
           <textarea
+            data-lain-chat-input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}

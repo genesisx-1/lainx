@@ -2,15 +2,45 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useBrowserStore } from '../../store/browser.store';
 import { useUIStore } from '../../store/ui.store';
 import { useBookmarksStore } from '../../store/bookmarks.store';
+import { IPC_CHANNELS } from '../../../shared/ipc-channels';
+import type { ProviderId, ProviderSummary } from '../../../shared/types';
 
 interface AddressBarProps {
   onHistoryClick?: () => void;
   onSettingsClick?: () => void;
 }
 
+type OmniMode = 'url' | 'ask' | 'agent';
+
+const MODE_LABEL: Record<OmniMode, string> = {
+  url: 'URL',
+  ask: 'Ask',
+  agent: 'Agent',
+};
+
+const MODE_PLACEHOLDER: Record<OmniMode, string> = {
+  url: 'Search or enter URL',
+  ask: 'Ask anything — answers stream into the sidebar',
+  agent: 'Tell the agent what to do on this page…',
+};
+
 export function AddressBar({ onHistoryClick, onSettingsClick }: AddressBarProps) {
-  const { tabs, activeTabId, updateTab, webviewApi, addTab } = useBrowserStore();
-  const { toggleSidebar, toggleTerminal, sidebarOpen, terminalOpen } = useUIStore();
+  const { tabs, activeTabId, updateTab, webviewApi, addTab, setAgentDrivingTab } = useBrowserStore();
+  const { toggleSidebar, toggleTerminal, sidebarOpen, terminalOpen, setSidebarOpen } = useUIStore();
+  const [mode, setMode] = useState<OmniMode>('url');
+  const [providerForOmni, setProviderForOmni] = useState<ProviderId | ''>('');
+  const [providerSummary, setProviderSummary] = useState<ProviderSummary[]>([]);
+  useEffect(() => {
+    window.electron.ipcRenderer
+      .invoke(IPC_CHANNELS.PROVIDER_LIST)
+      .then((list: ProviderSummary[]) => {
+        setProviderSummary(list);
+        const ready = list.find((p) => p.hasKey) || list.find((p) => p.id === 'ollama');
+        if (ready) setProviderForOmni(ready.id);
+      })
+      .catch(() => {});
+  }, []);
+  void providerSummary;
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
   const [urlInput, setUrlInput] = useState(activeTab?.url || '');
   const [bookmarksOpen, setBookmarksOpen] = useState(false);
@@ -35,18 +65,39 @@ export function AddressBar({ onHistoryClick, onSettingsClick }: AddressBarProps)
   const canBookmark = !!activeTab && activeTab.url !== 'lain://welcome';
   const bookmarked = activeTab ? isBookmarked(activeTab.url) : false;
 
-  const handleNavigate = useCallback((e: React.FormEvent) => {
+  const handleNavigate = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    let url = urlInput.trim();
-    
-    // Add protocol if missing
+    const raw = urlInput.trim();
+    if (!raw) return;
+
+    if (mode === 'agent') {
+      try {
+        await window.electron.ipcRenderer.invoke(IPC_CHANNELS.AGENT_START, {
+          goal: raw,
+          mode: 'live',
+          tabId: activeTabId,
+          provider: providerForOmni || undefined,
+          withVision: true,
+          withPlanner: true,
+        });
+        setAgentDrivingTab(activeTabId);
+        setSidebarOpen(true);
+      } catch {/* ignore — sidebar UI will show errors */}
+      return;
+    }
+
+    if (mode === 'ask') {
+      // Send to the chat panel via a custom event the AssistantSidebar listens to.
+      window.dispatchEvent(new CustomEvent('lain:omnibox-ask', { detail: { question: raw } }));
+      setSidebarOpen(true);
+      return;
+    }
+
+    let url = raw;
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      // Check if it looks like a URL or a search query
       if (url.includes('.') && !url.includes(' ')) {
         url = 'https://' + url;
       } else {
-        // Search query
         url = 'https://www.google.com/search?q=' + encodeURIComponent(url);
       }
     }
@@ -54,7 +105,23 @@ export function AddressBar({ onHistoryClick, onSettingsClick }: AddressBarProps)
     if (activeTabId) {
       updateTab(activeTabId, { url, isLoading: true });
     }
-  }, [urlInput, activeTabId, updateTab]);
+  }, [urlInput, mode, activeTabId, updateTab, providerForOmni, setAgentDrivingTab, setSidebarOpen]);
+
+  // ⌘L jumps to omnibox (matches Comet/Arc/Chrome).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const isMac = navigator.platform.toLowerCase().includes('mac');
+      const mod = isMac ? e.metaKey : e.ctrlKey;
+      if (mod && e.key.toLowerCase() === 'l') {
+        e.preventDefault();
+        const input = document.getElementById('lain-omnibox') as HTMLInputElement | null;
+        input?.focus();
+        input?.select();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const handleBack = useCallback(() => {
     webviewApi?.goBack();
@@ -203,15 +270,29 @@ export function AddressBar({ onHistoryClick, onSettingsClick }: AddressBarProps)
         </button>
       </div>
 
-      {/* Address bar */}
+      {/* Address bar / omnibox */}
       <form onSubmit={handleNavigate} className="flex-1">
         <div ref={bookmarksMenuRef} className="relative">
+          {/* Mode chip — cycles URL → Ask → Agent. */}
+          <button
+            type="button"
+            onClick={() => setMode((m) => (m === 'url' ? 'ask' : m === 'ask' ? 'agent' : 'url'))}
+            className={`absolute left-1.5 top-1/2 -translate-y-1/2 h-7 px-2 rounded-md text-xs font-medium transition-colors flex items-center gap-1
+              ${mode === 'agent' ? 'bg-accent text-white shadow-glow' : mode === 'ask' ? 'bg-accent-soft/20 text-accent-soft' : 'bg-bg-panel/60 text-text-secondary'}`}
+            title={`Mode: ${MODE_LABEL[mode]} — click to switch`}
+          >
+            {mode === 'agent' ? '⚡' : mode === 'ask' ? '✦' : '⌘L'}
+            <span>{MODE_LABEL[mode]}</span>
+          </button>
           <input
+            id="lain-omnibox"
             type="text"
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
-            className="w-full h-10 pl-4 pr-20 lain-pill bg-bg-secondary/40 border border-border/40 text-text-primary text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 transition-all"
-            placeholder="Search or enter URL"
+            className={`w-full h-10 pl-[100px] pr-20 lain-pill bg-bg-secondary/40 border text-text-primary text-sm focus:outline-none focus:ring-2 transition-all ${
+              mode === 'agent' ? 'border-accent/60 focus:border-accent focus:ring-accent/30' : 'border-border/40 focus:border-accent focus:ring-accent/20'
+            }`}
+            placeholder={MODE_PLACEHOLDER[mode]}
           />
 
           {/* Bookmark buttons (inside address bar, right side) */}
