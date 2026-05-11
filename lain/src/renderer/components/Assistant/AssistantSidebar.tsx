@@ -9,6 +9,12 @@ type Tab = 'chat' | 'agent' | 'tasks';
 export function AssistantSidebar() {
   const [tab, setTab] = useState<Tab>('agent');
   const [showProviders, setShowProviders] = useState(false);
+  const [providersVersion, setProvidersVersion] = useState(0);
+
+  function closeProviders() {
+    setShowProviders(false);
+    setProvidersVersion((version) => version + 1);
+  }
 
   return (
     <div className="h-full flex flex-col bg-bg-secondary">
@@ -27,11 +33,11 @@ export function AssistantSidebar() {
         </button>
       </div>
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-        {tab === 'agent' && <AgentTab onOpenProviders={() => setShowProviders(true)} />}
+        {tab === 'agent' && <AgentTab onOpenProviders={() => setShowProviders(true)} providersVersion={providersVersion} />}
         {tab === 'chat' && <ChatPanel />}
         {tab === 'tasks' && <TasksTab />}
       </div>
-      {showProviders && <ProviderSettings onClose={() => setShowProviders(false)} />}
+      {showProviders && <ProviderSettings onClose={closeProviders} />}
     </div>
   );
 }

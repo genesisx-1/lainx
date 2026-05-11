@@ -3,92 +3,56 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const sharp = require('sharp');
-const pngToIco = require('png-to-ico');
-
 const root = path.resolve(__dirname, '..');
 const resourcesDir = path.join(root, 'resources');
-const svgPath = path.join(resourcesDir, 'icon.svg');
-const png1024Path = path.join(resourcesDir, 'icon.png');
-const icoPath = path.join(resourcesDir, 'icon.ico');
 const icnsPath = path.join(resourcesDir, 'icon.icns');
-const iconsetDir = path.join(resourcesDir, 'icon.iconset');
-
-const sizes = [16, 32, 64, 128, 256, 512, 1024];
+const requiredPngs = [
+  'icon-16x16.png',
+  'icon-32x32.png',
+  'icon-64x64.png',
+  'icon-128x128.png',
+  'icon-256x256.png',
+  'icon-512x512.png',
+  'icon-1024x1024.png',
+  'icon.png',
+  'icon.ico',
+];
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
 }
 
-async function writePngsFromSvg(svg) {
-  for (const size of sizes) {
-    const out = path.join(resourcesDir, `icon-${size}x${size}.png`);
-    await sharp(Buffer.from(svg)).resize(size, size).png().toFile(out);
-  }
-  fs.copyFileSync(path.join(resourcesDir, 'icon-1024x1024.png'), png1024Path);
-}
-
-function buildIcns() {
-  ensureDir(iconsetDir);
-  const mapping = [
-    ['icon-16x16.png', 'icon_16x16.png'],
-    ['icon-32x32.png', 'icon_16x16@2x.png'],
-    ['icon-32x32.png', 'icon_32x32.png'],
-    ['icon-64x64.png', 'icon_32x32@2x.png'],
-    ['icon-128x128.png', 'icon_128x128.png'],
-    ['icon-256x256.png', 'icon_128x128@2x.png'],
-    ['icon-256x256.png', 'icon_256x256.png'],
-    ['icon-512x512.png', 'icon_256x256@2x.png'],
-    ['icon-512x512.png', 'icon_512x512.png'],
-    ['icon-1024x1024.png', 'icon_512x512@2x.png'],
-  ];
-
-  for (const [src, dst] of mapping) {
-    fs.copyFileSync(path.join(resourcesDir, src), path.join(iconsetDir, dst));
-  }
-
-  execFileSync('iconutil', ['-c', 'icns', iconsetDir, '-o', icnsPath], {
-    stdio: 'inherit',
-  });
-}
-
-async function buildIco() {
-  const buffers = await Promise.all(
-    [16, 24, 32, 48, 64, 128, 256].map(async (s) =>
-      sharp(png1024Path).resize(s, s).png().toBuffer()
-    )
-  );
-  const icoBuf = await pngToIco(buffers);
-  fs.writeFileSync(icoPath, icoBuf);
-}
-
-async function main() {
+function main() {
   ensureDir(resourcesDir);
+  const missing = requiredPngs.filter((file) => !fs.existsSync(path.join(resourcesDir, file)));
 
-  if (!fs.existsSync(svgPath)) {
-    throw new Error(`Missing ${path.relative(root, svgPath)}. Create it first.`);
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing prebuilt icon assets: ${missing.join(', ')}. ` +
+      'Rebuild them on a machine with sharp installed.'
+    );
   }
 
-  const svg = fs.readFileSync(svgPath, 'utf8');
-
-  console.log('Generating PNG icons from SVG...');
-  await writePngsFromSvg(svg);
+  if (process.platform === 'darwin' && !fs.existsSync(icnsPath)) {
+    throw new Error('Missing resources/icon.icns. Rebuild icons on macOS before packaging.');
+  }
 
   if (process.platform === 'darwin') {
-    console.log('Generating macOS .icns...');
-    buildIcns();
-  } else {
-    console.log('Skipping .icns (not on macOS).');
+    try {
+      execFileSync('iconutil', ['-c', 'icns', path.join(resourcesDir, 'icon.iconset'), '-o', icnsPath], {
+        stdio: 'ignore',
+      });
+    } catch {
+      // Existing .icns is already sufficient for packaging.
+    }
   }
 
-  console.log('Generating Windows .ico...');
-  await buildIco();
-
-  console.log('Done. Icons written to resources/.');
+  console.log('Icon assets already present. Nothing to regenerate.');
 }
 
-main().catch((e) => {
+try {
+  main();
+} catch (e) {
   console.error(e);
   process.exit(1);
-});
-
+}

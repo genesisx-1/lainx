@@ -94,6 +94,7 @@ export interface ProviderSummary {
   label: string;
   hasKey: boolean;
   requiresKey: boolean;
+  isDefault: boolean;
   defaultModels: ModelPair;
   models: ModelPair;
   baseUrl?: string;

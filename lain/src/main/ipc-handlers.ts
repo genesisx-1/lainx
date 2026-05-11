@@ -225,11 +225,20 @@ export function registerIPCHandlers(
 
   ipcMain.handle(IPC_CHANNELS.PROVIDER_SET_KEY, async (_event, provider: ProviderId, key: string) => {
     secureStore.setApiKey(provider, key);
+    if (provider !== 'ollama' && key.trim()) {
+      secureStore.setDefaultProvider(provider);
+    }
     return { ok: true };
   });
 
   ipcMain.handle(IPC_CHANNELS.PROVIDER_CLEAR_KEY, async (_event, provider: ProviderId) => {
     secureStore.clearApiKey(provider);
+    if (secureStore.getDefaultProvider() === provider) {
+      const fallback = providerManager
+        .list()
+        .find((p) => p.id !== provider && p.requiresKey && p.hasKey);
+      secureStore.setDefaultProvider(fallback?.id || 'ollama');
+    }
     return { ok: true };
   });
 

@@ -34,6 +34,7 @@ export class ProviderManager {
 
   list(): ProviderSummary[] {
     const out: ProviderSummary[] = [];
+    const defaultProvider = this.secureStore.getDefaultProvider();
     for (const [id, p] of this.providers.entries()) {
       const override = this.secureStore.getModelOverride(id);
       out.push({
@@ -41,6 +42,7 @@ export class ProviderManager {
         label: p.label,
         hasKey: !p.requiresKey || this.secureStore.hasApiKey(id),
         requiresKey: p.requiresKey,
+        isDefault: id === defaultProvider,
         defaultModels: p.defaultModels,
         models: override || p.defaultModels,
       });
@@ -55,16 +57,13 @@ export class ProviderManager {
   }
 
   getDefault(): { id: ProviderId; provider: Provider; models: ModelPair } {
-    // Pick the user-configured default if it's actually ready; otherwise pick
-    // the first ready provider. Falls back to ollama if nothing is ready.
+    // Prefer a configured remote key over local Ollama. Ollama is always
+    // "ready" from a key perspective, but may not actually be running.
     const configured = this.secureStore.getDefaultProvider();
-    const candidates: ProviderId[] = [
-      configured,
-      'anthropic',
-      'openai',
-      'openrouter',
-      'ollama',
-    ];
+    const candidates: ProviderId[] =
+      configured === 'ollama'
+        ? ['anthropic', 'openai', 'openrouter', 'ollama']
+        : [configured, 'anthropic', 'openai', 'openrouter', 'ollama'];
     for (const id of candidates) {
       const p = this.providers.get(id);
       if (!p) continue;

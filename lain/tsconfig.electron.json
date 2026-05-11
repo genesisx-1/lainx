@@ -18,5 +18,10 @@
     }
   },
   "include": ["src/main/**/*", "src/shared/**/*"],
-  "exclude": ["node_modules", "dist", "src/renderer"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/renderer",
+    "src/main/services/embedded-ai.service.ts"
+  ]
 }

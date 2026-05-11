@@ -12,9 +12,10 @@ interface TimelineEntry {
 
 interface Props {
   onOpenProviders: () => void;
+  providersVersion: number;
 }
 
-export function AgentTab({ onOpenProviders }: Props) {
+export function AgentTab({ onOpenProviders, providersVersion }: Props) {
   const { activeTabId, setAgentDrivingTab } = useBrowserStore();
   const [goal, setGoal] = useState('');
   const [providers, setProviders] = useState<ProviderSummary[]>([]);
@@ -33,11 +34,15 @@ export function AgentTab({ onOpenProviders }: Props) {
       .invoke(IPC_CHANNELS.PROVIDER_LIST)
       .then((list: ProviderSummary[]) => {
         setProviders(list);
-        const ready = list.find((p) => p.hasKey) || list.find((p) => p.id === 'ollama');
+        const ready =
+          list.find((p) => p.isDefault && p.id !== 'ollama' && (!p.requiresKey || p.hasKey)) ||
+          list.find((p) => p.requiresKey && p.hasKey) ||
+          list.find((p) => p.isDefault && (!p.requiresKey || p.hasKey)) ||
+          list.find((p) => p.id === 'ollama');
         if (ready) setSelectedProvider(ready.id);
       })
       .catch(() => {});
-  }, []);
+  }, [providersVersion]);
 
   useEffect(() => {
     const unsub = window.electron.ipcRenderer.on(IPC_CHANNELS.AGENT_EVENT, (evt: AgentEvent) => {
