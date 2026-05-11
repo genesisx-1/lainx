@@ -12,13 +12,19 @@ interface InteractiveElement {
   index: number;
   tag: string;
   text: string;
-  type?: string;
-  placeholder?: string;
+  type?: string | null;
+  placeholder?: string | null;
+  ariaLabel?: string | null;
+  role?: string | null;
+  href?: string | null;
+  rect?: { x: number; y: number; width: number; height: number };
+  visible?: boolean;
 }
 
 interface BrowserState {
   tabs: Tab[];
   activeTabId: string | null;
+  agentDrivingTabId: string | null;
   webviewApi: {
     goBack: () => void;
     goForward: () => void;
@@ -30,8 +36,17 @@ interface BrowserState {
     typeInElement: (index: number, text: string) => Promise<boolean>;
     scrollPage: (direction: 'up' | 'down') => Promise<void>;
     executeScript: (script: string) => Promise<any>;
+    // Phase 1 additions
+    screenshot?: () => Promise<string | null>;
+    clickBySelector?: (selector: string) => Promise<boolean>;
+    typeBySelector?: (selector: string, text: string, submit?: boolean) => Promise<boolean>;
+    scrollTo?: (dest: 'top' | 'bottom' | number) => Promise<void>;
+    waitFor?: (args: { selector?: string; text?: string; ms?: number }) => Promise<boolean>;
+    extractText?: (selector?: string) => Promise<string>;
+    pressEnter?: () => Promise<void>;
   } | null;
   setWebviewApi: (api: BrowserState['webviewApi']) => void;
+  setAgentDrivingTab: (tabId: string | null) => void;
   addTab: (url?: string, options?: { isPrivate?: boolean }) => void;
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
@@ -51,8 +66,10 @@ export const useBrowserStore = create<BrowserState>((set) => ({
     }
   ],
   activeTabId: 'tab-1',
+  agentDrivingTabId: null,
   webviewApi: null,
   setWebviewApi: (api) => set({ webviewApi: api }),
+  setAgentDrivingTab: (tabId) => set({ agentDrivingTabId: tabId }),
 
   addTab: (url = 'lain://welcome', options) => {
     const isPrivate = !!options?.isPrivate;

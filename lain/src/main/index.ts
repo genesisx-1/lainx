@@ -6,6 +6,9 @@ import { TerminalService } from './services/terminal.service';
 import { AIService } from './services/ai.service';
 import { OllamaManagerService } from './services/ollama-manager.service';
 import { StorageService } from './services/storage.service';
+import { SecureStoreService } from './services/secure-store.service';
+import { ProviderManager } from './services/providers/manager';
+import { AgentOrchestrator } from './agent/orchestrator';
 import { registerIPCHandlers } from './ipc-handlers';
 import { IPC_CHANNELS } from '../shared/ipc-channels';
 
@@ -15,9 +18,12 @@ const downloadSessions = new WeakSet<Session>();
 
 // Initialize services
 const terminalService = new TerminalService();
-const aiService = new AIService();
+const secureStore = new SecureStoreService();
+const providerManager = new ProviderManager(secureStore);
+const aiService = new AIService(providerManager);
 const ollamaManagerService = new OllamaManagerService();
 const storageService = new StorageService();
+const orchestrator = new AgentOrchestrator(providerManager, () => mainWindow);
 
 function getAppIconPath(): string {
   // In packaged builds, we bundle project `resources/` into `process.resourcesPath/resources`.
@@ -169,7 +175,15 @@ ipcMain.on(IPC_CHANNELS.ONBOARDING_SKIP, () => {
 });
 
 // Register all IPC handlers
-registerIPCHandlers(terminalService, aiService, ollamaManagerService, storageService);
+registerIPCHandlers(
+  terminalService,
+  aiService,
+  ollamaManagerService,
+  storageService,
+  secureStore,
+  providerManager,
+  orchestrator
+);
 
 // App lifecycle
 app.whenReady().then(() => {
