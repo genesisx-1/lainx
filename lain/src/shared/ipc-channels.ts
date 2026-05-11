@@ -55,4 +55,34 @@ export const IPC_CHANNELS = {
   SHOW_ONBOARDING: 'show-onboarding',
   ONBOARDING_COMPLETE: 'onboarding:complete',
   ONBOARDING_SKIP: 'onboarding:skip',
+
+  // Multi-provider AI (new agent stack)
+  PROVIDER_LIST: 'provider:list',
+  PROVIDER_SET_KEY: 'provider:set-key',
+  PROVIDER_CLEAR_KEY: 'provider:clear-key',
+  PROVIDER_TEST: 'provider:test',
+  PROVIDER_SET_MODELS: 'provider:set-models',
+  PROVIDER_CHAT: 'provider:chat',
+
+  // Agent orchestrator
+  AGENT_START: 'agent:start',
+  AGENT_PAUSE: 'agent:pause',
+  AGENT_RESUME: 'agent:resume',
+  AGENT_CANCEL: 'agent:cancel',
+  AGENT_TAKEOVER: 'agent:takeover',
+  AGENT_RESPOND_USER: 'agent:respond-user',
+  AGENT_LIST_TASKS: 'agent:list-tasks',
+  AGENT_GET_TASK: 'agent:get-task',
+  AGENT_EVENT: 'agent:event',
+
+  // Browser primitives the agent uses
+  BROWSER_SCREENSHOT: 'browser:screenshot',
+  BROWSER_OBSERVE: 'browser:observe',
+  BROWSER_AGENT_ACTION: 'browser:agent-action',
+  BROWSER_SEND_INPUT: 'browser:send-input',
+
+  // Local control server / CLI
+  CONTROL_SERVER_GET_INFO: 'control-server:get-info',
+  CONTROL_SERVER_REGENERATE_TOKEN: 'control-server:regenerate-token',
+  CONTROL_SERVER_SET_ENABLED: 'control-server:set-enabled',
 } as const;

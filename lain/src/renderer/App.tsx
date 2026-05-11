@@ -7,7 +7,7 @@ import { HistoryPanel } from './components/Browser/HistoryPanel';
 import { SettingsPanel } from './components/Browser/SettingsPanel';
 import { DownloadsPanel } from './components/Browser/DownloadsPanel';
 import { TerminalPanel } from './components/Terminal/TerminalPanel';
-import { ChatPanel } from './components/Assistant/ChatPanel';
+import { AssistantSidebar } from './components/Assistant/AssistantSidebar';
 import { OllamaSetup } from './components/Onboarding/OllamaSetup';
 import { useUIStore } from './store/ui.store';
 import { useBrowserStore } from './store/browser.store';
@@ -215,10 +215,10 @@ export function App() {
           )}
         </div>
 
-        {/* AI sidebar on right */}
+        {/* AI sidebar on right (Comet-style tabbed: Agent / Chat) */}
         {sidebarOpen && (
-          <div className="w-[400px] border-l border-border flex-shrink-0">
-            <ChatPanel />
+          <div className="w-[420px] border-l border-border flex-shrink-0">
+            <AssistantSidebar />
           </div>
         )}
       </div>

@@ -4,7 +4,11 @@ import { AIService } from './services/ai.service';
 import { OllamaManagerService } from './services/ollama-manager.service';
 import { StorageService } from './services/storage.service';
 import { HistoryService } from './services/history.service';
+import { SecureStoreService } from './services/secure-store.service';
+import { ProviderManager } from './services/providers/manager';
+import { AgentOrchestrator } from './agent/orchestrator';
 import { IPC_CHANNELS } from '../shared/ipc-channels';
+import type { AIMessage, ProviderId } from '../shared/types';
 
 const historyService = new HistoryService();
 
@@ -12,7 +16,10 @@ export function registerIPCHandlers(
   terminalService: TerminalService,
   aiService: AIService,
   ollamaManager: OllamaManagerService,
-  storageService: StorageService
+  storageService: StorageService,
+  secureStore: SecureStoreService,
+  providerManager: ProviderManager,
+  orchestrator: AgentOrchestrator
 ) {
   // Terminal handlers
   ipcMain.handle(IPC_CHANNELS.TERMINAL_CREATE, async (event, options: { id: string; cwd?: string }) => {
@@ -206,5 +213,95 @@ export function registerIPCHandlers(
 
   ipcMain.handle(IPC_CHANNELS.BROWSER_CAN_GO_FORWARD, async (_event, tabId: string) => {
     return historyService.canGoForward(tabId);
+  });
+
+  // ---- Multi-provider AI -------------------------------------------------
+
+  ipcMain.handle(IPC_CHANNELS.PROVIDER_LIST, async () => {
+    return providerManager.list();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PROVIDER_SET_KEY, async (_event, provider: ProviderId, key: string) => {
+    secureStore.setApiKey(provider, key);
+    return { ok: true };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PROVIDER_CLEAR_KEY, async (_event, provider: ProviderId) => {
+    secureStore.clearApiKey(provider);
+    return { ok: true };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PROVIDER_TEST, async (_event, provider: ProviderId) => {
+    return providerManager.testProvider(provider);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PROVIDER_SET_MODELS, async (_event, provider: ProviderId, models: { planner: string; executor: string }) => {
+    secureStore.setModelOverride(provider, models);
+    return { ok: true };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PROVIDER_CHAT, async (
+    _event,
+    provider: ProviderId | undefined,
+    messages: AIMessage[],
+    opts: any = {}
+  ) => {
+    try {
+      const resp = await providerManager.chat(provider, messages, opts);
+      return resp;
+    } catch (e: any) {
+      return { error: e?.message || String(e) };
+    }
+  });
+
+  // ---- Agent orchestrator ------------------------------------------------
+
+  ipcMain.handle(IPC_CHANNELS.AGENT_START, async (_event, opts: any) => {
+    return orchestrator.start(opts);
+  });
+  ipcMain.handle(IPC_CHANNELS.AGENT_PAUSE, async (_event, taskId: string) => {
+    orchestrator.pause(taskId);
+    return { ok: true };
+  });
+  ipcMain.handle(IPC_CHANNELS.AGENT_RESUME, async (_event, taskId: string) => {
+    orchestrator.resume(taskId);
+    return { ok: true };
+  });
+  ipcMain.handle(IPC_CHANNELS.AGENT_CANCEL, async (_event, taskId: string) => {
+    orchestrator.cancel(taskId);
+    return { ok: true };
+  });
+  ipcMain.handle(IPC_CHANNELS.AGENT_TAKEOVER, async (_event, taskId: string) => {
+    orchestrator.takeover(taskId);
+    return { ok: true };
+  });
+  ipcMain.handle(IPC_CHANNELS.AGENT_LIST_TASKS, async () => {
+    return orchestrator.listTasks();
+  });
+  ipcMain.handle(IPC_CHANNELS.AGENT_GET_TASK, async (_event, id: string) => {
+    return orchestrator.getTask(id);
+  });
+
+  // ---- Control server / CLI ---------------------------------------------
+
+  ipcMain.handle(IPC_CHANNELS.CONTROL_SERVER_GET_INFO, async () => {
+    const cfg = secureStore.getControlServerConfig();
+    return {
+      enabled: cfg.enabled,
+      port: cfg.port,
+      token: cfg.token,
+      url: `http://127.0.0.1:${cfg.port}`,
+    };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CONTROL_SERVER_REGENERATE_TOKEN, async () => {
+    const token = `lain_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    secureStore.setControlServerConfig({ token });
+    return { token };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CONTROL_SERVER_SET_ENABLED, async (_event, enabled: boolean) => {
+    secureStore.setControlServerConfig({ enabled });
+    return { ok: true };
   });
 }
